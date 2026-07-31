@@ -1,9 +1,9 @@
 import sys
 import os
-from pathlib import Path
 import subprocess 
+from pathlib import Path
 
-BUILTINS = {"echo", "exit", "type"}
+BUILTINS = {"echo", "exit", "type", "pwd"}
 
 def find_command(cmd: str) -> Path | None:
     """
@@ -18,6 +18,13 @@ def find_command(cmd: str) -> Path | None:
             return full_path
 
     return None
+
+def handle_pwd() -> None:
+    """
+    Prints the current working directory.
+    """
+
+    print(Path.cwd())
 
 def handle_external_programs(cmd, args: list[str]) -> None:
     """
@@ -62,6 +69,9 @@ def handle_command(cmd: str, args: list[str]) -> None:
 
     elif cmd.startswith("type"):
         handle_type(args[0])
+
+    elif cmd.startswith("pwd"):
+        handle_pwd()
 
     else:
         handle_external_programs(cmd, args)

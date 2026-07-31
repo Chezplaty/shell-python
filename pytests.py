@@ -106,7 +106,7 @@ class TestHandleExternalPrograms:
 class TestHandleType:
     @pytest.mark.parametrize("builtin_cmd", sorted(main.BUILTINS))
     def test_reports_shell_builtin_for_each_builtin(self, builtin_cmd, capsys):
-        main.handle_type(builtin_cmd)
+        main.handle_type([builtin_cmd])
 
         captured = capsys.readouterr()
         assert captured.out == f"{builtin_cmd} is a shell builtin\n"
@@ -114,7 +114,7 @@ class TestHandleType:
     def test_reports_path_for_external_command(self, monkeypatch, capsys):
         monkeypatch.setattr(main, "executable_path", lambda cmd: Path("/usr/bin/ls"))
 
-        main.handle_type("ls")
+        main.handle_type(["ls"])
 
         captured = capsys.readouterr()
         assert captured.out == "ls is /usr/bin/ls\n"
@@ -122,7 +122,7 @@ class TestHandleType:
     def test_reports_not_found_for_unknown_command(self, monkeypatch, capsys):
         monkeypatch.setattr(main, "executable_path", lambda cmd: None)
 
-        main.handle_type("bogus")
+        main.handle_type(["bogus"])
 
         captured = capsys.readouterr()
         assert captured.out == "bogus: not found\n"
@@ -130,10 +130,24 @@ class TestHandleType:
     def test_builtin_takes_precedence_over_path_lookup(self, monkeypatch, capsys):
         monkeypatch.setattr(main, "executable_path", lambda cmd: Path("/usr/bin/echo"))
 
-        main.handle_type("echo")
+        main.handle_type(["echo"])
 
         captured = capsys.readouterr()
         assert captured.out == "echo is a shell builtin\n"
+
+    def test_loops_through_multiple_args_in_order(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            main, "executable_path", lambda cmd: Path("/usr/bin/ls") if cmd == "ls" else None
+        )
+
+        main.handle_type(["echo", "ls", "bogus"])
+
+        captured = capsys.readouterr()
+        assert captured.out == (
+            "echo is a shell builtin\n"
+            "ls is /usr/bin/ls\n"
+            "bogus: not found\n"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -153,13 +167,13 @@ class TestHandleCommand:
         captured = capsys.readouterr()
         assert captured.out == "\n"
 
-    def test_type_delegates_to_handle_type_with_first_arg(self, monkeypatch):
+    def test_type_delegates_to_handle_type_with_all_args(self, monkeypatch):
         seen = []
-        monkeypatch.setattr(main, "handle_type", lambda cmd: seen.append(cmd))
+        monkeypatch.setattr(main, "handle_type", lambda args: seen.append(args))
 
-        main.handle_command("type", ["echo", "ignored_extra_arg"])
+        main.handle_command("type", ["echo", "ls"])
 
-        assert seen == ["echo"]
+        assert seen == [["echo", "ls"]]
 
     def test_unrecognized_command_delegates_to_external_programs(self, monkeypatch):
         seen = []

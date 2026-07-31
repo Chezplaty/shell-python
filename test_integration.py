@@ -230,6 +230,15 @@ class TestImplementType:
         assert "invalid_pineapple_command: not found\n" in out
         assert "invalid_orange_command: not found\n" in out
 
+    def test_reports_on_multiple_commands_in_a_single_call(self, tmp_path):
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, _ = run_shell(["type echo invalid_grape_command cd", "exit"], env=env)
+
+        assert "echo is a shell builtin\n" in out
+        assert "invalid_grape_command: not found\n" in out
+        assert "cd is a shell builtin\n" in out
+
 
 # ---------------------------------------------------------------------------
 # #IZ3 - Implement echo

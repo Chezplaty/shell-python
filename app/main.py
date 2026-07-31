@@ -12,6 +12,10 @@ def main():
         if command == "exit":
             break
 
+        # Echo (print)
+        if command.startswith("echo"):
+            print(command[5:])
+
         print(f"{command}: command not found") #print for newline
 
 

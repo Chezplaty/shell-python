@@ -3,9 +3,6 @@ import os
 import subprocess 
 from pathlib import Path
 
-BUILTINS = {"echo", "exit", "type", "pwd", "cd"}
-
-
 def executable_path(cmd: str) -> Path | None:
     """
     Searches the system PATH for an executable matching the given command name.
@@ -61,23 +58,24 @@ def handle_external_programs(cmd, args: list[str]) -> None:
     else:
         print(f"{cmd}: command not found")
 
-def handle_type(cmd: str) -> None:
+def handle_type(args: list[str]) -> None:
     """
     Handles the shell's type builtin by identifying whether a command is built in or external.
     Prints the command's location if it exists in PATH, or a not found message otherwise.
     """
 
-    if cmd in BUILTINS:
-        print(f"{cmd} is a shell builtin")
-        return
+    for cmd in args:
+        if cmd in BUILTINS:
+            print(f"{cmd} is a shell builtin")
+            continue
 
-    path = executable_path(cmd)
+        path = executable_path(cmd)
 
-    if path:
-        print(f"{cmd} is {path}")
+        if path:
+            print(f"{cmd} is {path}")
 
-    else:
-        print(f"{cmd}: not found")
+        else:
+            print(f"{cmd}: not found")
 
 def handle_echo(args: list[str]) -> None:
     """
@@ -87,17 +85,25 @@ def handle_echo(args: list[str]) -> None:
 
     print(" ".join(args))
 
+BUILTINS = {"exit": None, 
+            "echo": handle_echo,
+            "type": handle_type,
+            "pwd": handle_pwd,
+            "cd": handle_cd}
+
 def handle_command(cmd: str, args: list[str]) -> None:
     """
     Executes the appropriate handler for a parsed shell command and its argument.
     Prints an error message when the command is not supported by the shell.
     """ 
 
+    #handler = BUILTINS.get(cmd, "")
+
     if cmd.startswith("echo"):
         handle_echo(args)
 
     elif cmd.startswith("type"):
-        handle_type(args[0])
+        handle_type(args)
 
     elif cmd.startswith("pwd"):
         handle_pwd()

@@ -199,7 +199,7 @@ class TestHandleCommand:
 
     def test_type_delegates_to_handle_type_with_all_args(self, monkeypatch):
         seen = []
-        monkeypatch.setattr(main, "handle_type", lambda args: seen.append(args))
+        monkeypatch.setitem(main.BUILTINS, "type", lambda args: seen.append(args))
 
         main.handle_command("type", ["echo", "ls"])
 
@@ -215,13 +215,11 @@ class TestHandleCommand:
 
         assert seen == [("ls", ["-la"])]
 
-    def test_startswith_matching_is_prefix_based_not_exact(self, capsys):
-        # cmd.startswith("echo") means any command beginning with "echo"
-        # (e.g. "echoing") is routed to the echo branch, not just "echo" itself.
+    def test_exact_match_required_not_prefix(self, capsys):
         main.handle_command("echoing", ["surprise"])
 
         captured = capsys.readouterr()
-        assert captured.out == "surprise\n"
+        assert captured.out == "echoing: command not found\n"
 
 
 # ---------------------------------------------------------------------------

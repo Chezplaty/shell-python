@@ -26,7 +26,7 @@ def handle_cd(args: list[str]) -> None:
     if len(args) > 1:
         print(f"cd: too many arguments")
 
-    path = args[0]
+    path = Path.home() if args[0] == '~' else args[0]
 
     try:
         os.chdir(path)
@@ -49,7 +49,7 @@ def handle_pwd(args: list[str]) -> None:
     
     print(Path.cwd())
 
-def handle_external_programs(cmd, args: list[str]) -> None:
+def handle_external_programs(cmd: str, args: list[str]) -> None:
     """
     Executes an external command by locating its executable path through PATH.
     Runs the command with the provided arguments or prints an error if the command cannot be found.
@@ -90,7 +90,7 @@ def handle_echo(args: list[str]) -> None:
 
     print(" ".join(args))
 
-BUILTINS = {"exit": None, 
+BUILTINS = {"exit": None,
             "echo": handle_echo,
             "type": handle_type,
             "pwd": handle_pwd,
@@ -100,21 +100,12 @@ def handle_command(cmd: str, args: list[str]) -> None:
     """
     Executes the appropriate handler for a parsed shell command and its argument.
     Prints an error message when the command is not supported by the shell.
-    """ 
+    """
 
-    #handler = BUILTINS.get(cmd, "")
+    handler = BUILTINS.get(cmd, "")
 
-    if cmd.startswith("echo"):
-        handle_echo(args)
-
-    elif cmd.startswith("type"):
-        handle_type(args)
-
-    elif cmd.startswith("pwd"):
-        handle_pwd(args)
-
-    elif cmd.startswith("cd"):
-        handle_cd(args)
+    if handler:
+        handler(args)
 
     else:
         handle_external_programs(cmd, args)

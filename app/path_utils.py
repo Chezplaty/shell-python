@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-def executable_path(cmd: str) -> Path | None:
+def get_executable(cmd: str) -> Path | None:
     """
     Searches the system PATH for an executable matching the given command name.
     Returns the command's full path if found, otherwise returns None.

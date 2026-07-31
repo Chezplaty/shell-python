@@ -13,7 +13,7 @@ def make_executable(path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# executable_path
+# get_executable
 # ---------------------------------------------------------------------------
 
 class TestFindCommand:
@@ -22,19 +22,19 @@ class TestFindCommand:
         make_executable(exe)
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        result = path_utils.executable_path("mycmd")
+        result = path_utils.get_executable("mycmd")
 
         assert result == exe
 
     def test_returns_none_when_not_found(self, tmp_path, monkeypatch):
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        assert path_utils.executable_path("does_not_exist") is None
+        assert path_utils.get_executable("does_not_exist") is None
 
     def test_empty_path_returns_none(self, monkeypatch):
         monkeypatch.setenv("PATH", "")
 
-        assert path_utils.executable_path("ls") is None
+        assert path_utils.get_executable("ls") is None
 
     def test_returns_first_match_in_path_order(self, tmp_path, monkeypatch):
         first_dir = tmp_path / "first"
@@ -45,7 +45,7 @@ class TestFindCommand:
         make_executable(second_dir / "mycmd")
         monkeypatch.setenv("PATH", os.pathsep.join([str(first_dir), str(second_dir)]))
 
-        result = path_utils.executable_path("mycmd")
+        result = path_utils.get_executable("mycmd")
 
         assert result == first_dir / "mycmd"
 
@@ -55,7 +55,7 @@ class TestFindCommand:
         non_exec.chmod(stat.S_IREAD)
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        assert path_utils.executable_path("mycmd") is None
+        assert path_utils.get_executable("mycmd") is None
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ class TestFindCommand:
 
 class TestHandleExternalPrograms:
     def test_runs_command_when_found(self, monkeypatch):
-        monkeypatch.setattr(executor, "executable_path", lambda cmd: Path("/usr/bin/ls"))
+        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/ls"))
         calls = []
         monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
 
@@ -73,7 +73,7 @@ class TestHandleExternalPrograms:
         assert calls == [["ls", "-la"]]
 
     def test_prints_not_found_when_missing(self, monkeypatch, capsys):
-        monkeypatch.setattr(executor, "executable_path", lambda cmd: None)
+        monkeypatch.setattr(executor, "get_executable", lambda cmd: None)
 
         executor.handle_external_programs("nope", [])
 
@@ -81,7 +81,7 @@ class TestHandleExternalPrograms:
         assert captured.out == "nope: command not found\n"
 
     def test_runs_with_no_args(self, monkeypatch):
-        monkeypatch.setattr(executor, "executable_path", lambda cmd: Path("/usr/bin/ls"))
+        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/ls"))
         calls = []
         monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
 
@@ -90,7 +90,7 @@ class TestHandleExternalPrograms:
         assert calls == [["ls"]]
 
     def test_runs_with_multiple_args(self, monkeypatch):
-        monkeypatch.setattr(executor, "executable_path", lambda cmd: Path("/usr/bin/cp"))
+        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/cp"))
         calls = []
         monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
 
@@ -112,7 +112,7 @@ class TestHandleType:
         assert captured.out == f"{builtin_cmd} is a shell builtin\n"
 
     def test_reports_path_for_external_command(self, monkeypatch, capsys):
-        monkeypatch.setattr(shell_builtins, "executable_path", lambda cmd: Path("/usr/bin/ls"))
+        monkeypatch.setattr(shell_builtins, "get_executable", lambda cmd: Path("/usr/bin/ls"))
 
         shell_builtins.handle_type(["ls"])
 
@@ -120,7 +120,7 @@ class TestHandleType:
         assert captured.out == "ls is /usr/bin/ls\n"
 
     def test_reports_not_found_for_unknown_command(self, monkeypatch, capsys):
-        monkeypatch.setattr(shell_builtins, "executable_path", lambda cmd: None)
+        monkeypatch.setattr(shell_builtins, "get_executable", lambda cmd: None)
 
         shell_builtins.handle_type(["bogus"])
 
@@ -128,7 +128,7 @@ class TestHandleType:
         assert captured.out == "bogus: not found\n"
 
     def test_builtin_takes_precedence_over_path_lookup(self, monkeypatch, capsys):
-        monkeypatch.setattr(shell_builtins, "executable_path", lambda cmd: Path("/usr/bin/echo"))
+        monkeypatch.setattr(shell_builtins, "get_executable", lambda cmd: Path("/usr/bin/echo"))
 
         shell_builtins.handle_type(["echo"])
 
@@ -137,7 +137,7 @@ class TestHandleType:
 
     def test_loops_through_multiple_args_in_order(self, monkeypatch, capsys):
         monkeypatch.setattr(
-            shell_builtins, "executable_path", lambda cmd: Path("/usr/bin/ls") if cmd == "ls" else None
+            shell_builtins, "get_executable", lambda cmd: Path("/usr/bin/ls") if cmd == "ls" else None
         )
 
         shell_builtins.handle_type(["echo", "ls", "bogus"])

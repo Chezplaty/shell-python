@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from app.path_utils import executable_path
+from app.path_utils import get_executable
 
 def handle_cd(args: list[str]) -> None:
     """
@@ -48,7 +48,7 @@ def handle_type(args: list[str]) -> None:
             print(f"{cmd} is a shell builtin")
             continue
 
-        path = executable_path(cmd)
+        path = get_executable(cmd)
 
         if path:
             print(f"{cmd} is {path}")

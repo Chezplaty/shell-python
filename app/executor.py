@@ -1,6 +1,6 @@
 import subprocess
 
-from app.path_utils import executable_path
+from app.path_utils import get_executable
 from app.shell_builtins import BUILTINS
 
 def handle_external_programs(cmd: str, args: list[str]) -> None:
@@ -11,7 +11,7 @@ def handle_external_programs(cmd: str, args: list[str]) -> None:
 
     #TODO: implement error handling if subprocess does not work
 
-    program = executable_path(cmd)
+    program = get_executable(cmd)
     if program:
         subprocess.run([cmd, *args]) #expand list
     else:

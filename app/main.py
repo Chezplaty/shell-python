@@ -58,7 +58,7 @@ def handle_command(cmd: str, args: list[str]) -> None:
     """ 
 
     if cmd.startswith("echo"):
-        print("".join(args))
+        print(" ".join(args))
 
     elif cmd.startswith("type"):
         handle_type(args[0])

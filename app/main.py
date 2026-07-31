@@ -26,10 +26,10 @@ def handle_external_programs(cmd, arg: str) -> None:
     """
 
     #TODO: implement error handling if subprocess does not work
-    
+
     program = find_command(cmd)
     if program:
-        subprocess.run([program, *arg]) #expand list
+        subprocess.run([cmd, *arg]) #expand list
     else:
         print(f"{cmd}: command not found")
 

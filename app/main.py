@@ -43,10 +43,11 @@ def main():
                 if path:
                     print(f"{arg} is {path}")
                 else:
+                    print(arg)
                     print(f"{arg}: not found")
 
         else:
-            print(f"{arg}: command not found") #print for newline
+            print(f"{cmd}: command not found") #print for newline
 
 
 if __name__ == "__main__":

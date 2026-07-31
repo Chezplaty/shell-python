@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app import main
+from app import executor, main, path_utils, shell_builtins
 
 
 def make_executable(path: Path) -> None:
@@ -22,19 +22,19 @@ class TestFindCommand:
         make_executable(exe)
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        result = main.executable_path("mycmd")
+        result = path_utils.executable_path("mycmd")
 
         assert result == exe
 
     def test_returns_none_when_not_found(self, tmp_path, monkeypatch):
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        assert main.executable_path("does_not_exist") is None
+        assert path_utils.executable_path("does_not_exist") is None
 
     def test_empty_path_returns_none(self, monkeypatch):
         monkeypatch.setenv("PATH", "")
 
-        assert main.executable_path("ls") is None
+        assert path_utils.executable_path("ls") is None
 
     def test_returns_first_match_in_path_order(self, tmp_path, monkeypatch):
         first_dir = tmp_path / "first"
@@ -45,7 +45,7 @@ class TestFindCommand:
         make_executable(second_dir / "mycmd")
         monkeypatch.setenv("PATH", os.pathsep.join([str(first_dir), str(second_dir)]))
 
-        result = main.executable_path("mycmd")
+        result = path_utils.executable_path("mycmd")
 
         assert result == first_dir / "mycmd"
 
@@ -55,7 +55,7 @@ class TestFindCommand:
         non_exec.chmod(stat.S_IREAD)
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        assert main.executable_path("mycmd") is None
+        assert path_utils.executable_path("mycmd") is None
 
 
 # ---------------------------------------------------------------------------
@@ -64,37 +64,37 @@ class TestFindCommand:
 
 class TestHandleExternalPrograms:
     def test_runs_command_when_found(self, monkeypatch):
-        monkeypatch.setattr(main, "executable_path", lambda cmd: Path("/usr/bin/ls"))
+        monkeypatch.setattr(executor, "executable_path", lambda cmd: Path("/usr/bin/ls"))
         calls = []
-        monkeypatch.setattr(main.subprocess, "run", lambda args: calls.append(args))
+        monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
 
-        main.handle_external_programs("ls", ["-la"])
+        executor.handle_external_programs("ls", ["-la"])
 
         assert calls == [["ls", "-la"]]
 
     def test_prints_not_found_when_missing(self, monkeypatch, capsys):
-        monkeypatch.setattr(main, "executable_path", lambda cmd: None)
+        monkeypatch.setattr(executor, "executable_path", lambda cmd: None)
 
-        main.handle_external_programs("nope", [])
+        executor.handle_external_programs("nope", [])
 
         captured = capsys.readouterr()
         assert captured.out == "nope: command not found\n"
 
     def test_runs_with_no_args(self, monkeypatch):
-        monkeypatch.setattr(main, "executable_path", lambda cmd: Path("/usr/bin/ls"))
+        monkeypatch.setattr(executor, "executable_path", lambda cmd: Path("/usr/bin/ls"))
         calls = []
-        monkeypatch.setattr(main.subprocess, "run", lambda args: calls.append(args))
+        monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
 
-        main.handle_external_programs("ls", [])
+        executor.handle_external_programs("ls", [])
 
         assert calls == [["ls"]]
 
     def test_runs_with_multiple_args(self, monkeypatch):
-        monkeypatch.setattr(main, "executable_path", lambda cmd: Path("/usr/bin/cp"))
+        monkeypatch.setattr(executor, "executable_path", lambda cmd: Path("/usr/bin/cp"))
         calls = []
-        monkeypatch.setattr(main.subprocess, "run", lambda args: calls.append(args))
+        monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
 
-        main.handle_external_programs("cp", ["a.txt", "b.txt", "-v"])
+        executor.handle_external_programs("cp", ["a.txt", "b.txt", "-v"])
 
         assert calls == [["cp", "a.txt", "b.txt", "-v"]]
 
@@ -104,43 +104,43 @@ class TestHandleExternalPrograms:
 # ---------------------------------------------------------------------------
 
 class TestHandleType:
-    @pytest.mark.parametrize("builtin_cmd", sorted(main.BUILTINS))
+    @pytest.mark.parametrize("builtin_cmd", sorted(shell_builtins.BUILTINS))
     def test_reports_shell_builtin_for_each_builtin(self, builtin_cmd, capsys):
-        main.handle_type([builtin_cmd])
+        shell_builtins.handle_type([builtin_cmd])
 
         captured = capsys.readouterr()
         assert captured.out == f"{builtin_cmd} is a shell builtin\n"
 
     def test_reports_path_for_external_command(self, monkeypatch, capsys):
-        monkeypatch.setattr(main, "executable_path", lambda cmd: Path("/usr/bin/ls"))
+        monkeypatch.setattr(shell_builtins, "executable_path", lambda cmd: Path("/usr/bin/ls"))
 
-        main.handle_type(["ls"])
+        shell_builtins.handle_type(["ls"])
 
         captured = capsys.readouterr()
         assert captured.out == "ls is /usr/bin/ls\n"
 
     def test_reports_not_found_for_unknown_command(self, monkeypatch, capsys):
-        monkeypatch.setattr(main, "executable_path", lambda cmd: None)
+        monkeypatch.setattr(shell_builtins, "executable_path", lambda cmd: None)
 
-        main.handle_type(["bogus"])
+        shell_builtins.handle_type(["bogus"])
 
         captured = capsys.readouterr()
         assert captured.out == "bogus: not found\n"
 
     def test_builtin_takes_precedence_over_path_lookup(self, monkeypatch, capsys):
-        monkeypatch.setattr(main, "executable_path", lambda cmd: Path("/usr/bin/echo"))
+        monkeypatch.setattr(shell_builtins, "executable_path", lambda cmd: Path("/usr/bin/echo"))
 
-        main.handle_type(["echo"])
+        shell_builtins.handle_type(["echo"])
 
         captured = capsys.readouterr()
         assert captured.out == "echo is a shell builtin\n"
 
     def test_loops_through_multiple_args_in_order(self, monkeypatch, capsys):
         monkeypatch.setattr(
-            main, "executable_path", lambda cmd: Path("/usr/bin/ls") if cmd == "ls" else None
+            shell_builtins, "executable_path", lambda cmd: Path("/usr/bin/ls") if cmd == "ls" else None
         )
 
-        main.handle_type(["echo", "ls", "bogus"])
+        shell_builtins.handle_type(["echo", "ls", "bogus"])
 
         captured = capsys.readouterr()
         assert captured.out == (
@@ -157,37 +157,37 @@ class TestHandleType:
 class TestHandleCd:
     def test_changes_to_given_directory(self, monkeypatch):
         calls = []
-        monkeypatch.setattr(main.os, "chdir", lambda path: calls.append(path))
+        monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        main.handle_cd(["/some/dir"])
+        shell_builtins.handle_cd(["/some/dir"])
 
         assert calls == ["/some/dir"]
 
     def test_tilde_expands_to_home_directory(self, monkeypatch):
         home = Path("/home/user")
-        monkeypatch.setattr(main.Path, "home", lambda: home)
+        monkeypatch.setattr(Path, "home", lambda: home)
         calls = []
-        monkeypatch.setattr(main.os, "chdir", lambda path: calls.append(path))
+        monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        main.handle_cd(["~"])
+        shell_builtins.handle_cd(["~"])
 
         assert calls == [home]
 
     def test_tilde_takes_precedence_over_matching_named_directory(self, monkeypatch):
         home = Path("/home/user")
-        monkeypatch.setattr(main.Path, "home", lambda: home)
+        monkeypatch.setattr(Path, "home", lambda: home)
         calls = []
-        monkeypatch.setattr(main.os, "chdir", lambda path: calls.append(path))
+        monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        main.handle_cd(["~"])
+        shell_builtins.handle_cd(["~"])
 
         assert calls == [home]
         assert calls != ["~"]
 
     def test_prints_error_for_too_many_arguments(self, monkeypatch, capsys):
-        monkeypatch.setattr(main.os, "chdir", lambda path: pytest.fail("should not chdir"))
+        monkeypatch.setattr(os, "chdir", lambda path: pytest.fail("should not chdir"))
 
-        main.handle_cd(["dir1", "dir2"])
+        shell_builtins.handle_cd(["dir1", "dir2"])
 
         captured = capsys.readouterr()
         assert captured.out == "cd: too many arguments\n"
@@ -196,9 +196,9 @@ class TestHandleCd:
         def raise_not_found(path):
             raise FileNotFoundError
 
-        monkeypatch.setattr(main.os, "chdir", raise_not_found)
+        monkeypatch.setattr(os, "chdir", raise_not_found)
 
-        main.handle_cd(["/does/not/exist"])
+        shell_builtins.handle_cd(["/does/not/exist"])
 
         captured = capsys.readouterr()
         assert captured.out == "cd: /does/not/exist: No such file or directory\n"
@@ -207,9 +207,9 @@ class TestHandleCd:
         def raise_not_a_directory(path):
             raise NotADirectoryError
 
-        monkeypatch.setattr(main.os, "chdir", raise_not_a_directory)
+        monkeypatch.setattr(os, "chdir", raise_not_a_directory)
 
-        main.handle_cd(["/some/file"])
+        shell_builtins.handle_cd(["/some/file"])
 
         captured = capsys.readouterr()
         assert captured.out == "cd /some/file: Not a directory\n"
@@ -218,9 +218,9 @@ class TestHandleCd:
         def raise_permission_error(path):
             raise PermissionError
 
-        monkeypatch.setattr(main.os, "chdir", raise_permission_error)
+        monkeypatch.setattr(os, "chdir", raise_permission_error)
 
-        main.handle_cd(["/locked"])
+        shell_builtins.handle_cd(["/locked"])
 
         captured = capsys.readouterr()
         assert captured.out == "cd: /locked: Permission denied\n"
@@ -229,10 +229,10 @@ class TestHandleCd:
         # Known edge case/bug: with no arguments, `args[0]` is accessed before
         # the too-many-arguments check, so a bare `cd` raises IndexError
         # instead of e.g. defaulting to the home directory.
-        monkeypatch.setattr(main.os, "chdir", lambda path: pytest.fail("should not chdir"))
+        monkeypatch.setattr(os, "chdir", lambda path: pytest.fail("should not chdir"))
 
         with pytest.raises(IndexError):
-            main.handle_cd([])
+            shell_builtins.handle_cd([])
 
 
 # ---------------------------------------------------------------------------
@@ -241,25 +241,25 @@ class TestHandleCd:
 
 class TestHandlePwd:
     def test_prints_current_working_directory(self, monkeypatch, capsys, tmp_path):
-        monkeypatch.setattr(main.Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        main.handle_pwd([])
+        shell_builtins.handle_pwd([])
 
         captured = capsys.readouterr()
         assert captured.out == f"{tmp_path}\n"
 
     def test_prints_error_for_extra_arguments(self, monkeypatch, capsys, tmp_path):
-        monkeypatch.setattr(main.Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        main.handle_pwd(["extra"])
+        shell_builtins.handle_pwd(["extra"])
 
         captured = capsys.readouterr()
         assert captured.out == "pwd: too many arguments\n"
 
     def test_does_not_print_cwd_when_extra_arguments(self, monkeypatch, capsys, tmp_path):
-        monkeypatch.setattr(main.Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        main.handle_pwd(["extra", "args"])
+        shell_builtins.handle_pwd(["extra", "args"])
 
         captured = capsys.readouterr()
         assert str(tmp_path) not in captured.out
@@ -271,37 +271,37 @@ class TestHandlePwd:
 
 class TestHandleCommand:
     def test_echo_prints_joined_args(self, capsys):
-        main.handle_command("echo", ["hello", "world"])
+        executor.handle_command("echo", ["hello", "world"])
 
         captured = capsys.readouterr()
         assert captured.out == "hello world\n"
 
     def test_echo_with_no_args_prints_blank_line(self, capsys):
-        main.handle_command("echo", [])
+        executor.handle_command("echo", [])
 
         captured = capsys.readouterr()
         assert captured.out == "\n"
 
     def test_type_delegates_to_handle_type_with_all_args(self, monkeypatch):
         seen = []
-        monkeypatch.setitem(main.BUILTINS, "type", lambda args: seen.append(args))
+        monkeypatch.setitem(shell_builtins.BUILTINS, "type", lambda args: seen.append(args))
 
-        main.handle_command("type", ["echo", "ls"])
+        executor.handle_command("type", ["echo", "ls"])
 
         assert seen == [["echo", "ls"]]
 
     def test_unrecognized_command_delegates_to_external_programs(self, monkeypatch):
         seen = []
         monkeypatch.setattr(
-            main, "handle_external_programs", lambda cmd, args: seen.append((cmd, args))
+            executor, "handle_external_programs", lambda cmd, args: seen.append((cmd, args))
         )
 
-        main.handle_command("ls", ["-la"])
+        executor.handle_command("ls", ["-la"])
 
         assert seen == [("ls", ["-la"])]
 
     def test_exact_match_required_not_prefix(self, capsys):
-        main.handle_command("echoing", ["surprise"])
+        executor.handle_command("echoing", ["surprise"])
 
         captured = capsys.readouterr()
         assert captured.out == "echoing: command not found\n"

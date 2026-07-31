@@ -3,7 +3,8 @@ import os
 import subprocess 
 from pathlib import Path
 
-BUILTINS = {"echo", "exit", "type", "pwd"}
+BUILTINS = {"echo", "exit", "type", "pwd", "cd"}
+
 
 def executable_path(cmd: str) -> Path | None:
     """
@@ -19,8 +20,22 @@ def executable_path(cmd: str) -> Path | None:
 
     return None
 
-def handle_cd():
-    ...
+def handle_cd(*args: str) -> None:
+    """
+    Checks if given directory exists.
+    Changes into directory if found, otherwise prints an error message.
+    """
+
+    if len(*args) > 1:
+        print(f"cd: too many arguments")
+
+    direc = args[0][0]
+    path_obj = Path(direc)
+    if path_obj.exists():
+        os.chdir(path_obj)
+    else:
+        print(f"cd: {direc}: No such file or directory")
+    
 
 def handle_pwd() -> None:
     """
@@ -75,6 +90,9 @@ def handle_command(cmd: str, args: list[str]) -> None:
 
     elif cmd.startswith("pwd"):
         handle_pwd()
+
+    elif cmd.startswith("cd"):
+        handle_cd(args)
 
     else:
         handle_external_programs(cmd, args)

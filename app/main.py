@@ -25,10 +25,12 @@ def handle_cd(args: list[str]) -> None:
 
     if len(args) > 1:
         print(f"cd: too many arguments")
+        return
 
     path = Path.home() if args[0] == '~' else args[0]
 
     try:
+        #changes direc relative to cwd (tracked by OS kernel)
         os.chdir(path)
     except FileNotFoundError:
         print(f"cd: {path}: No such file or directory")

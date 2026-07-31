@@ -130,6 +130,15 @@ class TestCdBuiltin:
 
         assert "cd: too many arguments\n" in out
 
+    def test_cd_tilde_changes_to_home_directory(self, tmp_path):
+        home = tmp_path / "home"
+        home.mkdir()
+        env = {**os.environ, "HOME": str(home)}
+
+        out, _ = run_shell(["cd ~", "pwd", "exit"], cwd=tmp_path, env=env)
+
+        assert f"$ {home}\n" in out
+
 
 # ---------------------------------------------------------------------------
 # #IP1 - Run a program

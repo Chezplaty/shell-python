@@ -151,6 +151,91 @@ class TestHandleType:
 
 
 # ---------------------------------------------------------------------------
+# handle_cd
+# ---------------------------------------------------------------------------
+
+class TestHandleCd:
+    def test_changes_to_given_directory(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(main.os, "chdir", lambda path: calls.append(path))
+
+        main.handle_cd(["/some/dir"])
+
+        assert calls == ["/some/dir"]
+
+    def test_tilde_expands_to_home_directory(self, monkeypatch):
+        home = Path("/home/user")
+        monkeypatch.setattr(main.Path, "home", lambda: home)
+        calls = []
+        monkeypatch.setattr(main.os, "chdir", lambda path: calls.append(path))
+
+        main.handle_cd(["~"])
+
+        assert calls == [home]
+
+    def test_tilde_takes_precedence_over_matching_named_directory(self, monkeypatch):
+        home = Path("/home/user")
+        monkeypatch.setattr(main.Path, "home", lambda: home)
+        calls = []
+        monkeypatch.setattr(main.os, "chdir", lambda path: calls.append(path))
+
+        main.handle_cd(["~"])
+
+        assert calls == [home]
+        assert calls != ["~"]
+
+    def test_prints_error_for_too_many_arguments(self, monkeypatch, capsys):
+        monkeypatch.setattr(main.os, "chdir", lambda path: pytest.fail("should not chdir"))
+
+        main.handle_cd(["dir1", "dir2"])
+
+        captured = capsys.readouterr()
+        assert captured.out == "cd: too many arguments\n"
+
+    def test_prints_error_when_directory_not_found(self, monkeypatch, capsys):
+        def raise_not_found(path):
+            raise FileNotFoundError
+
+        monkeypatch.setattr(main.os, "chdir", raise_not_found)
+
+        main.handle_cd(["/does/not/exist"])
+
+        captured = capsys.readouterr()
+        assert captured.out == "cd: /does/not/exist: No such file or directory\n"
+
+    def test_prints_error_when_path_is_not_a_directory(self, monkeypatch, capsys):
+        def raise_not_a_directory(path):
+            raise NotADirectoryError
+
+        monkeypatch.setattr(main.os, "chdir", raise_not_a_directory)
+
+        main.handle_cd(["/some/file"])
+
+        captured = capsys.readouterr()
+        assert captured.out == "cd /some/file: Not a directory\n"
+
+    def test_prints_error_when_permission_denied(self, monkeypatch, capsys):
+        def raise_permission_error(path):
+            raise PermissionError
+
+        monkeypatch.setattr(main.os, "chdir", raise_permission_error)
+
+        main.handle_cd(["/locked"])
+
+        captured = capsys.readouterr()
+        assert captured.out == "cd: /locked: Permission denied\n"
+
+    def test_bare_cd_with_no_arguments_raises_indexerror(self, monkeypatch):
+        # Known edge case/bug: with no arguments, `args[0]` is accessed before
+        # the too-many-arguments check, so a bare `cd` raises IndexError
+        # instead of e.g. defaulting to the home directory.
+        monkeypatch.setattr(main.os, "chdir", lambda path: pytest.fail("should not chdir"))
+
+        with pytest.raises(IndexError):
+            main.handle_cd([])
+
+
+# ---------------------------------------------------------------------------
 # handle_pwd
 # ---------------------------------------------------------------------------
 

@@ -29,7 +29,7 @@ def handle_external_programs(cmd, args: list[str]) -> None:
 
     program = find_command(cmd)
     if program:
-        subprocess.run([cmd, *args]) #expand list
+        subprocess.run([str(program), *args]) #expand list
     else:
         print(f"{cmd}: command not found")
 
@@ -79,7 +79,7 @@ def main():
 
         parts = line.split()
         cmd = parts[0]
-        args = parts[1:] if len(parts) > 1 else ""
+        args = parts[1:] if len(parts) > 1 else []
         
         if cmd == "exit":
             break

@@ -19,7 +19,7 @@ def find_command(cmd: str) -> Path | None:
 
     return None
 
-def handle_external_programs(cmd, arg: str) -> None:
+def handle_external_programs(cmd, args: list[str]) -> None:
     """
     Executes an external command by locating its executable path through PATH.
     Runs the command with the provided arguments or prints an error if the command cannot be found.
@@ -29,7 +29,7 @@ def handle_external_programs(cmd, arg: str) -> None:
 
     program = find_command(cmd)
     if program:
-        subprocess.run([cmd, *arg]) #expand list
+        subprocess.run([cmd, *args]) #expand list
     else:
         print(f"{cmd}: command not found")
 
@@ -51,20 +51,20 @@ def handle_type(cmd: str) -> None:
     else:
         print(f"{cmd}: not found")
 
-def handle_command(cmd, arg) -> None:
+def handle_command(cmd: str, args: list[str]) -> None:
     """
     Executes the appropriate handler for a parsed shell command and its argument.
     Prints an error message when the command is not supported by the shell.
     """ 
 
     if cmd.startswith("echo"):
-        print(arg)
+        print("".join(args))
 
     elif cmd.startswith("type"):
-        handle_type(arg)
+        handle_type(args[0])
 
     else:
-        handle_external_programs(cmd, arg)
+        handle_external_programs(cmd, args)
 
 def main():
     """
@@ -79,12 +79,12 @@ def main():
 
         parts = line.split()
         cmd = parts[0]
-        arg = parts[1:] if len(parts) > 1 else ""
-
+        args = parts[1:] if len(parts) > 1 else ""
+        
         if cmd == "exit":
             break
 
-        handle_command(cmd, arg)
+        handle_command(cmd, args)
 
 if __name__ == "__main__":
     main()

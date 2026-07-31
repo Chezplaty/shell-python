@@ -5,7 +5,7 @@ from pathlib import Path
 
 BUILTINS = {"echo", "exit", "type", "pwd"}
 
-def find_command(cmd: str) -> Path | None:
+def executable_path(cmd: str) -> Path | None:
     """
     Searches the system PATH for an executable matching the given command name.
     Returns the command's full path if found, otherwise returns None.
@@ -34,7 +34,7 @@ def handle_external_programs(cmd, args: list[str]) -> None:
 
     #TODO: implement error handling if subprocess does not work
 
-    program = find_command(cmd)
+    program = executable_path(cmd)
     if program:
         subprocess.run([cmd, *args]) #expand list
     else:
@@ -50,7 +50,7 @@ def handle_type(cmd: str) -> None:
         print(f"{cmd} is a shell builtin")
         return
 
-    path = find_command(cmd)
+    path = executable_path(cmd)
 
     if path:
         print(f"{cmd} is {path}")

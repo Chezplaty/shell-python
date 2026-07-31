@@ -43,7 +43,6 @@ def main():
                 if path:
                     print(f"{arg} is {path}")
                 else:
-                    print(arg)
                     print(f"{arg}: not found")
 
         else:

@@ -3,3 +3,6 @@ name = "codecrafters-shell"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = []
+
+[tool.pytest.ini_options]
+python_files = ["pytests.py", "test_*.py", "*_test.py"]

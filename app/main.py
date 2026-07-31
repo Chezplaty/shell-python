@@ -7,6 +7,11 @@ def main():
 
         # Wait for user input
         command = input()
+
+        # Exit
+        if command == "exit":
+            break
+
         print(f"{command}: command not found") #print for newline
 
 

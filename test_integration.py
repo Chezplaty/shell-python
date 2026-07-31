@@ -1,0 +1,229 @@
+"""
+End-to-end tests that spawn the shell as a real subprocess and drive it
+through stdin/stdout, mirroring how the CodeCrafters tester exercises each
+stage (pwd, running programs, locating executables, type, echo, exit, the
+REPL loop, invalid commands, and the prompt).
+
+Unlike pytests.py (which calls functions in app.main directly), these tests
+treat the shell as a black box: they never import app.main.
+"""
+
+import os
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parent
+
+
+def make_executable(path: Path, body: str) -> None:
+    path.write_text(body)
+    path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def run_shell(commands: list[str], cwd: Path = REPO_ROOT, env: dict | None = None, timeout: float = 10):
+    """
+    Runs the shell as a subprocess, feeding it `commands` one per line
+    (a trailing "exit" is required to terminate the REPL), and returns
+    (stdout, returncode).
+    """
+    stdin_text = "\n".join(commands) + "\n"
+    run_env = {**(env if env is not None else os.environ)}
+    run_env["PYTHONPATH"] = str(REPO_ROOT)
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "app.main"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=cwd,
+        env=run_env,
+    )
+    out, _ = proc.communicate(stdin_text, timeout=timeout)
+    return out, proc.returncode
+
+
+# ---------------------------------------------------------------------------
+# #EI0 - Navigation: the pwd builtin
+# ---------------------------------------------------------------------------
+
+class TestPwdBuiltin:
+    def test_type_pwd_reports_shell_builtin(self):
+        out, _ = run_shell(["type pwd", "exit"])
+
+        assert "pwd is a shell builtin\n" in out
+
+    def test_pwd_prints_current_working_directory(self, tmp_path):
+        out, _ = run_shell(["pwd", "exit"], cwd=tmp_path)
+
+        assert f"$ {tmp_path}\n" in out
+
+
+# ---------------------------------------------------------------------------
+# #IP1 - Run a program
+# ---------------------------------------------------------------------------
+
+class TestRunProgram:
+    def test_runs_external_program_with_single_arg(self, tmp_path):
+        bin_dir = tmp_path / "fox"
+        bin_dir.mkdir()
+        make_executable(
+            bin_dir / "custom_exe_9492",
+            "#!/bin/sh\necho \"Program was passed $(($# + 1)) args (including program name).\"\n"
+            "echo \"Arg #0 (program name): $(basename \"$0\")\"\n"
+            "i=1\nfor a in \"$@\"; do echo \"Arg #$i: $a\"; i=$((i+1)); done\n",
+        )
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+        out, _ = run_shell(["custom_exe_9492 Alice", "exit"], env=env)
+
+        assert "Program was passed 2 args (including program name).\n" in out
+        assert "Arg #0 (program name): custom_exe_9492\n" in out
+        assert "Arg #1: Alice\n" in out
+
+    def test_runs_external_program_with_multiple_args(self, tmp_path):
+        bin_dir = tmp_path / "fox"
+        bin_dir.mkdir()
+        make_executable(
+            bin_dir / "custom_exe_1588",
+            "#!/bin/sh\necho \"Program was passed $(($# + 1)) args (including program name).\"\n"
+            "echo \"Arg #0 (program name): $(basename \"$0\")\"\n"
+            "i=1\nfor a in \"$@\"; do echo \"Arg #$i: $a\"; i=$((i+1)); done\n",
+        )
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+        out, _ = run_shell(["custom_exe_1588 Alice James", "exit"], env=env)
+
+        assert "Program was passed 3 args (including program name).\n" in out
+        assert "Arg #0 (program name): custom_exe_1588\n" in out
+        assert "Arg #1: Alice\n" in out
+        assert "Arg #2: James\n" in out
+
+
+# ---------------------------------------------------------------------------
+# #MG5 - Locate executable files
+# ---------------------------------------------------------------------------
+
+class TestLocateExecutableFiles:
+    def test_type_resolves_to_first_executable_match_in_path_order(self, tmp_path):
+        fox_dir, dog_dir, owl_dir = tmp_path / "fox", tmp_path / "dog", tmp_path / "owl"
+        for d in (fox_dir, dog_dir, owl_dir):
+            d.mkdir()
+
+        (fox_dir / "my_exe").write_text("not executable")
+        (owl_dir / "my_exe").write_text("not executable")
+        make_executable(dog_dir / "my_exe", "#!/bin/sh\necho hi\n")
+
+        env = {
+            **os.environ,
+            "PATH": os.pathsep.join([str(owl_dir), str(dog_dir), str(fox_dir)]),
+        }
+
+        out, _ = run_shell(["type my_exe", "exit"], env=env)
+
+        assert f"my_exe is {dog_dir / 'my_exe'}\n" in out
+
+    def test_type_reports_not_found_for_unknown_commands(self, tmp_path):
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, _ = run_shell(
+            ["type invalid_apple_command", "type invalid_blueberry_command", "exit"],
+            env=env,
+        )
+
+        assert "invalid_apple_command: not found\n" in out
+        assert "invalid_blueberry_command: not found\n" in out
+
+
+# ---------------------------------------------------------------------------
+# #EZ5 - Implement type
+# ---------------------------------------------------------------------------
+
+class TestImplementType:
+    def test_reports_shell_builtin_for_each_builtin(self):
+        out, _ = run_shell(["type echo", "type exit", "type type", "exit"])
+
+        assert "echo is a shell builtin\n" in out
+        assert "exit is a shell builtin\n" in out
+        assert "type is a shell builtin\n" in out
+
+    def test_reports_not_found_for_invalid_commands(self, tmp_path):
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, _ = run_shell(
+            ["type invalid_pineapple_command", "type invalid_orange_command", "exit"],
+            env=env,
+        )
+
+        assert "invalid_pineapple_command: not found\n" in out
+        assert "invalid_orange_command: not found\n" in out
+
+
+# ---------------------------------------------------------------------------
+# #IZ3 - Implement echo
+# ---------------------------------------------------------------------------
+
+class TestImplementEcho:
+    def test_echoes_back_multiple_words(self):
+        out, _ = run_shell(["echo raspberry pear", "echo mango strawberry apple", "exit"])
+
+        assert "raspberry pear\n" in out
+        assert "mango strawberry apple\n" in out
+
+
+# ---------------------------------------------------------------------------
+# #PN5 - Implement exit
+# ---------------------------------------------------------------------------
+
+class TestImplementExit:
+    def test_exits_cleanly_with_no_output_after_exit_command(self, tmp_path):
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, returncode = run_shell(["invalid_pear_command", "exit"], env=env)
+
+        assert "invalid_pear_command: command not found\n" in out
+        assert out.endswith("$ ")
+        assert returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# #FF0 - Implement a REPL
+# ---------------------------------------------------------------------------
+
+class TestReplLoop:
+    def test_handles_a_sequence_of_invalid_commands(self, tmp_path):
+        env = {**os.environ, "PATH": str(tmp_path)}
+        commands = [f"invalid_command_{i}" for i in range(1, 5)]
+
+        out, _ = run_shell([*commands, "exit"], env=env)
+
+        for i in range(1, 5):
+            assert f"invalid_command_{i}: command not found\n" in out
+
+
+# ---------------------------------------------------------------------------
+# #CZ2 - Handle invalid commands
+# ---------------------------------------------------------------------------
+
+class TestHandleInvalidCommands:
+    def test_reports_command_not_found(self, tmp_path):
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, _ = run_shell(["invalid_apple_command", "exit"], env=env)
+
+        assert "invalid_apple_command: command not found\n" in out
+
+
+# ---------------------------------------------------------------------------
+# #OO8 - Print a prompt
+# ---------------------------------------------------------------------------
+
+class TestPrintPrompt:
+    def test_prints_prompt_before_reading_input(self):
+        out, returncode = run_shell(["exit"])
+
+        assert out == "$ "
+        assert returncode == 0

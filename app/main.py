@@ -19,6 +19,9 @@ def executable_path(cmd: str) -> Path | None:
 
     return None
 
+def handle_cd():
+    ...
+
 def handle_pwd() -> None:
     """
     Prints the current working directory.

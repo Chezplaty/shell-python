@@ -151,6 +151,36 @@ class TestHandleType:
 
 
 # ---------------------------------------------------------------------------
+# handle_pwd
+# ---------------------------------------------------------------------------
+
+class TestHandlePwd:
+    def test_prints_current_working_directory(self, monkeypatch, capsys, tmp_path):
+        monkeypatch.setattr(main.Path, "cwd", lambda: tmp_path)
+
+        main.handle_pwd([])
+
+        captured = capsys.readouterr()
+        assert captured.out == f"{tmp_path}\n"
+
+    def test_prints_error_for_extra_arguments(self, monkeypatch, capsys, tmp_path):
+        monkeypatch.setattr(main.Path, "cwd", lambda: tmp_path)
+
+        main.handle_pwd(["extra"])
+
+        captured = capsys.readouterr()
+        assert captured.out == "pwd: too many arguments\n"
+
+    def test_does_not_print_cwd_when_extra_arguments(self, monkeypatch, capsys, tmp_path):
+        monkeypatch.setattr(main.Path, "cwd", lambda: tmp_path)
+
+        main.handle_pwd(["extra", "args"])
+
+        captured = capsys.readouterr()
+        assert str(tmp_path) not in captured.out
+
+
+# ---------------------------------------------------------------------------
 # handle_command
 # ---------------------------------------------------------------------------
 

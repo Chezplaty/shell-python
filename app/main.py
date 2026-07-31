@@ -37,11 +37,16 @@ def handle_cd(args: list[str]) -> None:
     except PermissionError:
         print(f"cd: {path}: Permission denied")
     
-def handle_pwd() -> None:
+def handle_pwd(args: list[str]) -> None:
     """
     Prints the current working directory.
+    Prints an error message if there are other arguments.
     """
 
+    if args:
+        print("pwd: too many arguments")
+        return
+    
     print(Path.cwd())
 
 def handle_external_programs(cmd, args: list[str]) -> None:
@@ -106,7 +111,7 @@ def handle_command(cmd: str, args: list[str]) -> None:
         handle_type(args)
 
     elif cmd.startswith("pwd"):
-        handle_pwd()
+        handle_pwd(args)
 
     elif cmd.startswith("cd"):
         handle_cd(args)

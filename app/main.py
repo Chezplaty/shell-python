@@ -5,6 +5,10 @@ from pathlib import Path
 BUILTINS = {"echo", "exit", "type"}
 
 def find_command(cmd: str) -> Path | None:
+    """
+    Searches the system PATH for an executable matching the given command name.
+    Returns the command's full path if found, otherwise returns None.
+    """
     system_path = os.getenv("PATH", "")
 
     for directory in system_path.split(os.pathsep):
@@ -14,7 +18,12 @@ def find_command(cmd: str) -> Path | None:
 
     return None
 
-def handle_type(cmd: str):
+def handle_type(cmd: str) -> None:
+    """
+    Handles the shell's type builtin by identifying whether a command is built in or external.
+    Prints the command's location if it exists in PATH, or a not found message otherwise.
+    """
+
     if cmd in BUILTINS:
         print(f"{cmd} is a shell builtin")
         return
@@ -27,7 +36,11 @@ def handle_type(cmd: str):
     else:
         print(f"{cmd}: not found")
 
-def handle_command(cmd, arg): 
+def handle_command(cmd, arg) -> None:
+    """
+    Executes the appropriate handler for a parsed shell command and its argument.
+    Prints an error message when the command is not supported by the shell.
+    """ 
 
     if cmd.startswith("echo"):
         print(arg)
@@ -39,23 +52,24 @@ def handle_command(cmd, arg):
         print(f"{cmd}: command not found")
 
 def main():
+    """
+    Runs the interactive shell loop that reads and processes user commands.
+    Continuously prompts the user for input until the exit command is received.
+    """
+    
     while True:
-        sys.stdout.write("$ ") #no new line, can use print("$ ", end="")
+        sys.stdout.write("$ ") 
 
-        # Wait for user input
         line = input()
 
         parts = line.split(maxsplit=1)
         cmd = parts[0]
         arg = parts[1] if len(parts) > 1 else ""
 
-        # Exit
         if cmd == "exit":
             break
 
         handle_command(cmd, arg)
-
-
 
 if __name__ == "__main__":
     main()

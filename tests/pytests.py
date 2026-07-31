@@ -225,14 +225,15 @@ class TestHandleCd:
         captured = capsys.readouterr()
         assert captured.out == "cd: /locked: Permission denied\n"
 
-    def test_bare_cd_with_no_arguments_raises_indexerror(self, monkeypatch):
-        # Known edge case/bug: with no arguments, `args[0]` is accessed before
-        # the too-many-arguments check, so a bare `cd` raises IndexError
-        # instead of e.g. defaulting to the home directory.
-        monkeypatch.setattr(os, "chdir", lambda path: pytest.fail("should not chdir"))
+    def test_bare_cd_with_no_arguments_changes_to_home_directory(self, monkeypatch):
+        home = Path("/home/user")
+        monkeypatch.setattr(Path, "home", lambda: home)
+        calls = []
+        monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        with pytest.raises(IndexError):
-            shell_builtins.handle_cd([])
+        shell_builtins.handle_cd([])
+
+        assert calls == [home]
 
 
 # ---------------------------------------------------------------------------

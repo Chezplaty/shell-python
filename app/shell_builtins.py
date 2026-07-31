@@ -13,7 +13,8 @@ def handle_cd(args: list[str]) -> None:
         print(f"cd: too many arguments")
         return
 
-    path = Path.home() if args[0] == '~' else args[0]
+    #path is home directory if args is nothing or ~
+    path = Path.home() if not args or args[0] == '~' else args[0]
 
     try:
         #changes direc relative to cwd (tracked by OS kernel)

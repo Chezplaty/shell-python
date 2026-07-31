@@ -15,8 +15,8 @@ def main():
         # Echo (print)
         if command.startswith("echo"):
             print(command[5:])
-
-        print(f"{command}: command not found") #print for newline
+        else:
+            print(f"{command}: command not found") #print for newline
 
 
 if __name__ == "__main__":

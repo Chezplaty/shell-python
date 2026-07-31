@@ -79,6 +79,14 @@ def handle_type(cmd: str) -> None:
     else:
         print(f"{cmd}: not found")
 
+def handle_echo(args: list[str]) -> None:
+    """
+    Prints the provided arguments separated by spaces.
+    Preserves the order of the arguments and appends a newline to the output.
+    """
+
+    print(" ".join(args))
+
 def handle_command(cmd: str, args: list[str]) -> None:
     """
     Executes the appropriate handler for a parsed shell command and its argument.
@@ -86,7 +94,7 @@ def handle_command(cmd: str, args: list[str]) -> None:
     """ 
 
     if cmd.startswith("echo"):
-        print(" ".join(args))
+        handle_echo(args)
 
     elif cmd.startswith("type"):
         handle_type(args[0])

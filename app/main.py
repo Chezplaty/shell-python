@@ -4,16 +4,39 @@ from pathlib import Path
 
 BUILTINS = {"echo", "exit", "type"}
 
-def find_command(command: str) -> Path | None:
+def find_command(cmd: str) -> Path | None:
     system_path = os.getenv("PATH", "")
 
     for directory in system_path.split(os.pathsep):
-        full_path = Path(directory)/command
+        full_path = Path(directory)/cmd
         if full_path.exists() and os.access(full_path, os.X_OK): #X_OK tests permissions
             return full_path
 
     return None
 
+def handle_type(cmd: str):
+    if cmd in BUILTINS:
+        print(f"{cmd} is a shell builtin")
+        return
+
+    path = find_command(cmd)
+
+    if path:
+        print(f"{cmd} is {path}")
+
+    else:
+        print(f"{cmd}: not found")
+
+def handle_command(cmd, arg): 
+
+    if cmd.startswith("echo"):
+        print(arg)
+
+    elif cmd.startswith("type"):
+        handle_type(arg)
+
+    else:
+        print(f"{cmd}: command not found")
 
 def main():
     while True:
@@ -30,23 +53,8 @@ def main():
         if cmd == "exit":
             break
 
-        # Echo (print)
-        if cmd.startswith("echo"):
-            print(arg)
+        handle_command(cmd, arg)
 
-        # Type - description of command type
-        elif cmd.startswith("type"):
-            if arg in BUILTINS:
-                print(f"{arg} is a shell builtin")
-            else:
-                path = find_command(arg)
-                if path:
-                    print(f"{arg} is {path}")
-                else:
-                    print(f"{arg}: not found")
-
-        else:
-            print(f"{cmd}: command not found") #print for newline
 
 
 if __name__ == "__main__":

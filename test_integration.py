@@ -63,6 +63,75 @@ class TestPwdBuiltin:
 
 
 # ---------------------------------------------------------------------------
+# Navigation: the cd builtin
+# ---------------------------------------------------------------------------
+
+class TestCdBuiltin:
+    def test_type_cd_reports_shell_builtin(self):
+        out, _ = run_shell(["type cd", "exit"])
+
+        assert "cd is a shell builtin\n" in out
+
+    def test_cd_to_absolute_path_changes_directory(self, tmp_path):
+        target = tmp_path / "nested"
+        target.mkdir()
+
+        out, _ = run_shell([f"cd {target}", "pwd", "exit"], cwd=tmp_path)
+
+        assert f"$ {target}\n" in out
+
+    def test_cd_to_relative_path_changes_directory(self, tmp_path):
+        (tmp_path / "nested").mkdir()
+
+        out, _ = run_shell(["cd nested", "pwd", "exit"], cwd=tmp_path)
+
+        assert f"$ {tmp_path / 'nested'}\n" in out
+
+    def test_cd_to_parent_directory_with_dotdot(self, tmp_path):
+        nested = tmp_path / "nested"
+        nested.mkdir()
+
+        out, _ = run_shell(["cd ..", "pwd", "exit"], cwd=nested)
+
+        assert f"$ {tmp_path}\n" in out
+
+    def test_cd_nonexistent_path_prints_error(self, tmp_path):
+        missing = tmp_path / "does_not_exist"
+
+        out, _ = run_shell([f"cd {missing}", "exit"], cwd=tmp_path)
+
+        assert f"cd: {missing}: No such file or directory\n" in out
+
+    def test_cd_into_a_file_prints_not_a_directory_error(self, tmp_path):
+        file_path = tmp_path / "just_a_file"
+        file_path.write_text("not a directory")
+
+        out, _ = run_shell([f"cd {file_path}", "exit"], cwd=tmp_path)
+
+        assert f"cd {file_path}: Not a directory\n" in out
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses directory permission checks")
+    def test_cd_into_unreadable_directory_prints_permission_denied(self, tmp_path):
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        locked.chmod(0)
+
+        try:
+            out, _ = run_shell([f"cd {locked}", "exit"], cwd=tmp_path)
+        finally:
+            locked.chmod(0o700)
+
+        assert f"cd: {locked}: Permission denied\n" in out
+
+    def test_cd_with_too_many_arguments_prints_error(self, tmp_path):
+        (tmp_path / "nested").mkdir()
+
+        out, _ = run_shell(["cd nested extra_arg", "exit"], cwd=tmp_path)
+
+        assert "cd: too many arguments\n" in out
+
+
+# ---------------------------------------------------------------------------
 # #IP1 - Run a program
 # ---------------------------------------------------------------------------
 

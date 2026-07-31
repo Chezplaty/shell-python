@@ -20,23 +20,26 @@ def executable_path(cmd: str) -> Path | None:
 
     return None
 
-def handle_cd(*args: str) -> None:
+def handle_cd(args: list[str]) -> None:
     """
     Checks if given directory exists.
     Changes into directory if found, otherwise prints an error message.
     """
 
-    if len(*args) > 1:
+    if len(args) > 1:
         print(f"cd: too many arguments")
 
-    direc = args[0][0]
-    path_obj = Path(direc)
-    if path_obj.exists():
-        os.chdir(path_obj)
-    else:
-        print(f"cd: {direc}: No such file or directory")
-    
+    path = args[0]
 
+    try:
+        os.chdir(path)
+    except FileNotFoundError:
+        print(f"cd: {path}: No such file or directory")
+    except NotADirectoryError:
+        print(f"cd {path}: Not a directory")
+    except PermissionError:
+        print(f"cd: {path}: Permission denied")
+    
 def handle_pwd() -> None:
     """
     Prints the current working directory.

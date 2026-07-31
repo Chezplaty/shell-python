@@ -1,6 +1,7 @@
 import sys
 import os
 from pathlib import Path
+import subprocess 
 
 BUILTINS = {"echo", "exit", "type"}
 
@@ -13,10 +14,24 @@ def find_command(cmd: str) -> Path | None:
 
     for directory in system_path.split(os.pathsep):
         full_path = Path(directory)/cmd
-        if full_path.exists() and os.access(full_path, os.X_OK): #X_OK tests permissions
+        if full_path.exists() and os.access(full_path, os.X_OK): #X_OK tests executable 
             return full_path
 
     return None
+
+def handle_external_programs(cmd, arg: str) -> None:
+    """
+    Executes an external command by locating its executable path through PATH.
+    Runs the command with the provided arguments or prints an error if the command cannot be found.
+    """
+
+    #TODO: implement error handling if subprocess does not work
+    
+    program = find_command(cmd)
+    if program:
+        subprocess.run([program, *arg]) #expand list
+    else:
+        print(f"{cmd}: command not found")
 
 def handle_type(cmd: str) -> None:
     """
@@ -49,22 +64,22 @@ def handle_command(cmd, arg) -> None:
         handle_type(arg)
 
     else:
-        print(f"{cmd}: command not found")
+        handle_external_programs(cmd, arg)
 
 def main():
     """
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
-    
+
     while True:
         sys.stdout.write("$ ") 
 
         line = input()
 
-        parts = line.split(maxsplit=1)
+        parts = line.split()
         cmd = parts[0]
-        arg = parts[1] if len(parts) > 1 else ""
+        arg = parts[1:] if len(parts) > 1 else ""
 
         if cmd == "exit":
             break

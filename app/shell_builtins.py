@@ -2,9 +2,8 @@ import os
 from pathlib import Path
 
 from app.path_utils import get_executable
-from app.lexer import TokenType
-
 from app.errors import BuiltinError
+from app.redirects import apply_redirections
 
 def handle_cd(instruction: Instruction) -> None:
     """
@@ -12,9 +11,9 @@ def handle_cd(instruction: Instruction) -> None:
     Changes into directory if found, otherwise prints an error message.
     """
     args = instruction.args
-    
+
     if len(args) > 1:
-        raise BuiltinError("cd", "too many arguments")
+        raise BuiltinError(instruction.cmd, "too many arguments")
 
     #path is home directory if args is nothing or ~
     path = Path.home() if not args or args[0] == '~' else args[0]
@@ -22,12 +21,8 @@ def handle_cd(instruction: Instruction) -> None:
     try:
         #changes direc relative to cwd (tracked by OS kernel)
         os.chdir(path)
-    except FileNotFoundError:
-        print(f"cd: {path}: No such file or directory")
-    except NotADirectoryError:
-        print(f"cd {path}: Not a directory")
-    except PermissionError:
-        print(f"cd: {path}: Permission denied")
+    except OSError as e:
+        raise BuiltinError(instruction.cmd, f"{path}: {e.strerror}") from e
 
 def handle_pwd(instruction: Instruction) -> None:
     """
@@ -36,7 +31,7 @@ def handle_pwd(instruction: Instruction) -> None:
     """
 
     if instruction.args:
-        raise BuiltinError("pwd", "too many arguments")
+        raise BuiltinError(instruction.cmd, "too many arguments")
 
     print(Path.cwd())
 
@@ -66,20 +61,11 @@ def handle_echo(instruction: Instruction) -> None:
     """
 
     # check if output needs to be redirected
-    output = " ".join(instruction.args)
     if instruction.redirects:
-        for redirect in instruction.redirects:
-            if redirect.type == TokenType.OVERWRITE:
-                try:
-                    with open(redirect.target, "w") as file:
-                        file.write(output)
-                except FileNotFoundError:
-                    print(f"echo: {redirect.target}: No such file or directory")
-                #TODO: check between access denied and target just being a directory
-                except PermissionError:
-                    print(f"echo: {redirect.target}: Permission denied")
+        apply_redirections(instruction)
+
     else:
-        print(output)
+        print(" ".join(instruction.args))
 
 BUILTINS = {"exit": None,
             "echo": handle_echo,

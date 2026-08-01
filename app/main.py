@@ -8,9 +8,15 @@ class ParseState(Enum):
     SINGLE = 2
     DOUBLE = 3
 
+def finish_token(tokens: list[str], current: list[str]) -> None:
+
+    if current:
+        tokens.append("".join(current))
+        current.clear()
+
 def parse_command(line: str) -> list[str]:
 
-    parts = []
+    tokens = []
     current = []
     state = ParseState.NORMAL
     
@@ -20,9 +26,7 @@ def parse_command(line: str) -> list[str]:
         if state == ParseState.NORMAL:
 
             if char.isspace():
-                if current:
-                    parts.append("".join(current))
-                    current = []
+                finish_token(tokens, current)
 
             elif char == "'":
                 state = ParseState.SINGLE
@@ -35,18 +39,16 @@ def parse_command(line: str) -> list[str]:
         elif state == ParseState.SINGLE:
 
             if char == "'":
-                if current:
-                    parts.append("".join(current))
-                    current = []
+                finish_token(tokens, current)
                 state = ParseState.NORMAL
 
             else:
                 current.append(char)
 
-    if current:
-        parts.append("".join(current))
+    #check for leftover token
+    finish_token(tokens, current)
 
-    return parts
+    return tokens
 
 def main():
     """

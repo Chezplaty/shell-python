@@ -378,6 +378,60 @@ class TestParseCommand:
 
         assert result == ["echo", "bar", "shell's", "foo"]
 
+    def test_double_quotes_escaped_double_quote_is_literal(self):
+        result = parse_command('echo "say \\"hi\\""')
+
+        assert result == ["echo", 'say "hi"']
+
+    def test_double_quotes_escaped_backslash_is_single_literal_backslash(self):
+        result = parse_command('echo "a\\\\b"')
+
+        assert result == ["echo", "a\\b"]
+
+    def test_double_quotes_escaped_dollar_sign_is_literal(self):
+        result = parse_command('echo "\\$HOME"')
+
+        assert result == ["echo", "$HOME"]
+
+    def test_double_quotes_escaped_backtick_is_literal(self):
+        result = parse_command('echo "\\`cmd\\`"')
+
+        assert result == ["echo", "`cmd`"]
+
+    def test_double_quotes_escaped_newline_is_literal(self):
+        result = parse_command('echo "a\\\nb"')
+
+        assert result == ["echo", "a\nb"]
+
+    def test_double_quotes_escapes_multiple_special_characters_in_sequence(self):
+        line = 'echo "' + '\\$' + '\\`' + '\\"' + '\\\\' + '"'
+        result = parse_command(line)
+
+        assert result == ["echo", '$`"\\']
+
+    def test_double_quotes_escaped_ordinary_character_keeps_backslash(self):
+        # 'a' is not a special character, so the backslash is preserved
+        # literally alongside it rather than being consumed as an escape.
+        result = parse_command('echo "\\a"')
+
+        assert result == ["echo", "\\a"]
+
+    def test_double_quotes_escaped_single_quote_keeps_backslash_since_not_special(self):
+        # A single quote has no meaning inside double quotes, so it isn't in
+        # the special-character set and the backslash before it is literal.
+        result = parse_command('echo "\\\'"')
+
+        assert result == ["echo", "\\'"]
+
+    def test_double_quotes_unterminated_escape_at_end_is_dropped(self):
+        # Mirrors the trailing-lone-backslash behavior outside quotes:
+        # escaping is set but the string ends before a char arrives to apply
+        # it to, so the backslash silently disappears.
+        line = 'echo "abc' + '\\'
+        result = parse_command(line)
+
+        assert result == ["echo", "abc"]
+
     def test_single_quotes_preserve_backslashes_literally(self):
         result = parse_command(r"echo 'multiple\\slashes'")
 

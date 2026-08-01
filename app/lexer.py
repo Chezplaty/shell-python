@@ -30,8 +30,8 @@ def finish_token(tokens: list[str], current: list[str]) -> None:
         if word == '>' or word == '1>':
             token_type = TokenType.OVERWRITE
 
-        #tokens.append(Token(token_type, word))
-        tokens.append(word)
+        tokens.append(Token(token_type, word))
+        #tokens.append(word)
         current.clear()
 
 class Lexer:

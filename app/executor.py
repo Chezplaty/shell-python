@@ -17,16 +17,16 @@ def handle_external_programs(cmd: str, args: list[str]) -> None:
     else:
         print(f"{cmd}: command not found")
 
-def handle_command(cmd: str, args: list[str]) -> None:
+def handle_command(instruction: Instruction) -> None:
     """
     Executes the appropriate handler for a parsed shell command and its argument.
     Prints an error message when the command is not supported by the shell.
     """
 
-    handler = BUILTINS.get(cmd, "")
+    handler = BUILTINS.get(instruction.cmd, "")
 
     if handler:
-        handler(args)
+        handler(instruction)
 
     else:
-        handle_external_programs(cmd, args)
+        handle_external_programs(instruction.cmd, instruction.args)

@@ -2,6 +2,9 @@ import os
 from pathlib import Path
 
 from app.path_utils import get_executable
+from app.lexer import TokenType
+
+#TODO: create separate function to print out error messages
 
 def handle_cd(args: list[str]) -> None:
     """
@@ -57,13 +60,28 @@ def handle_type(args: list[str]) -> None:
         else:
             print(f"{cmd}: not found")
 
-def handle_echo(args: list[str]) -> None:
+def handle_echo(instruction: Instruction) -> None:
     """
     Prints the provided arguments separated by spaces.
     Preserves the order of the arguments and appends a newline to the output.
     """
 
-    print(" ".join(args))
+    # check if output needs to be redirected
+    output = " ".join(instruction.args)
+    if instruction.redirects:
+        for redirect in instruction.redirects:
+            if redirect.type == TokenType.OVERWRITE:
+                try:
+                    with open(redirect.target, "w") as file:
+                        file.write(output)
+                except FileNotFoundError:
+                    print(f"echo: {redirect.target}: No such file or directory")
+                #TODO: check between access denied and target just being a directory
+                except PermissionError:
+
+                    print(f"echo: {redirect.target}: Permission denied")
+    else:
+        print(output)
 
 BUILTINS = {"exit": None,
             "echo": handle_echo,

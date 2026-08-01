@@ -348,22 +348,22 @@ class TestFinishToken:
 
 
 # ---------------------------------------------------------------------------
-# Parser.turn_escape_off
+# Parser.disable_escape
 # ---------------------------------------------------------------------------
 
-class TestTurnEscapeOff:
+class TestDisableEscape:
     def test_sets_escaping_to_false(self):
         parser = Parser()
         parser._escaping = True
 
-        parser.turn_escape_off()
+        parser.disable_escape()
 
         assert parser._escaping is False
 
     def test_is_a_no_op_when_already_off(self):
         parser = Parser()
 
-        parser.turn_escape_off()
+        parser.disable_escape()
 
         assert parser._escaping is False
 

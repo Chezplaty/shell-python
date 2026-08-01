@@ -180,6 +180,32 @@ class TestRunProgram:
         assert "Arg #1: Alice\n" in out
         assert "Arg #2: James\n" in out
 
+    def test_runs_executable_named_with_spaces_via_single_quotes(self, tmp_path):
+        bin_dir = tmp_path / "fox"
+        bin_dir.mkdir()
+        make_executable(
+            bin_dir / "my program",
+            "#!/bin/sh\necho \"ran with arg: $1\"\n",
+        )
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+        out, _ = run_shell(["'my program' argument1", "exit"], env=env)
+
+        assert "ran with arg: argument1\n" in out
+
+    def test_runs_executable_named_with_spaces_via_double_quotes(self, tmp_path):
+        bin_dir = tmp_path / "fox"
+        bin_dir.mkdir()
+        make_executable(
+            bin_dir / "exe with spaces",
+            "#!/bin/sh\necho \"ran with arg: $1\"\n",
+        )
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+        out, _ = run_shell(['"exe with spaces" file.txt', "exit"], env=env)
+
+        assert "ran with arg: file.txt\n" in out
+
 
 # ---------------------------------------------------------------------------
 # #MG5 - Locate executable files

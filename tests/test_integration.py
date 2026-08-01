@@ -262,6 +262,37 @@ class TestImplementEcho:
 
 
 # ---------------------------------------------------------------------------
+# Single-quote parsing
+# ---------------------------------------------------------------------------
+
+class TestSingleQuoteParsing:
+    def test_echo_preserves_spaces_inside_single_quotes(self):
+        out, _ = run_shell(["echo 'shell hello'", "exit"])
+
+        assert "shell hello\n" in out
+
+    def test_echo_preserves_repeated_internal_whitespace(self):
+        out, _ = run_shell(["echo 'world     test'", "exit"])
+
+        assert "world     test\n" in out
+
+    def test_cat_reads_multiple_quoted_paths_with_spaces(self, tmp_path):
+        file1 = tmp_path / "file name"
+        file2 = tmp_path / "file name with spaces"
+        file1.write_text("content1 ")
+        file2.write_text("content2")
+
+        out, _ = run_shell([f"cat '{file1}' '{file2}'", "exit"], cwd=tmp_path)
+
+        assert "content1 content2" in out
+
+    def test_mixes_quoted_and_unquoted_arguments(self):
+        out, _ = run_shell(["echo hello 'shell world' again", "exit"])
+
+        assert "hello shell world again\n" in out
+
+
+# ---------------------------------------------------------------------------
 # #PN5 - Implement exit
 # ---------------------------------------------------------------------------
 

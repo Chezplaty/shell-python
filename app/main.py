@@ -20,8 +20,9 @@ def parse_command(line: str) -> list[str]:
         if state == ParseState.NORMAL:
 
             if char.isspace():
-                parts.extend(current)
-                current = []
+                if current:
+                    parts.append("".join(current))
+                    current = []
 
             elif char == "'":
                 state = ParseState.SINGLE
@@ -34,12 +35,16 @@ def parse_command(line: str) -> list[str]:
         elif state == ParseState.SINGLE:
 
             if char == "'":
-                parts.extend(current)
-                current = []
+                if current:
+                    parts.append("".join(current))
+                    current = []
                 state = ParseState.NORMAL
 
             else:
                 current.append(char)
+
+    if current:
+        parts.append("".join(current))
 
     return parts
 

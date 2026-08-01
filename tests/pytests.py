@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from app import executor, main, path_utils, shell_builtins
+from app.main import parse_command
 
 
 def make_executable(path: Path) -> None:
@@ -306,6 +307,49 @@ class TestHandleCommand:
 
         captured = capsys.readouterr()
         assert captured.out == "echoing: command not found\n"
+
+
+# ---------------------------------------------------------------------------
+# parse_command
+# ---------------------------------------------------------------------------
+
+class TestParseCommand:
+    def test_splits_on_single_space(self):
+        assert parse_command("echo hello") == ["echo", "hello"]
+
+    def test_collapses_repeated_whitespace(self):
+        assert parse_command("echo    hi     there") == ["echo", "hi", "there"]
+
+    def test_ignores_leading_and_trailing_whitespace(self):
+        assert parse_command("  echo hi  ") == ["echo", "hi"]
+
+    def test_empty_line_returns_empty_list(self):
+        assert parse_command("") == []
+
+    def test_whitespace_only_line_returns_empty_list(self):
+        assert parse_command("   ") == []
+
+    def test_single_quotes_preserve_spaces_between_words(self):
+        assert parse_command("echo 'shell hello'") == ["echo", "shell hello"]
+
+    def test_single_quotes_preserve_repeated_internal_whitespace(self):
+        assert parse_command("echo 'world     test'") == ["echo", "world     test"]
+
+    def test_multiple_single_quoted_arguments(self):
+        result = parse_command("cat '/tmp/file name' '/tmp/file name with spaces'")
+
+        assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
+
+    def test_single_quotes_can_produce_empty_argument(self):
+        assert parse_command("echo ''") == ["echo"]
+
+    def test_single_quoted_argument_alone(self):
+        assert parse_command("'hello world'") == ["hello world"]
+
+    def test_mixes_quoted_and_unquoted_arguments(self):
+        result = parse_command("echo hello 'shell world' again")
+
+        assert result == ["echo", "hello", "shell world", "again"]
 
 
 # ---------------------------------------------------------------------------

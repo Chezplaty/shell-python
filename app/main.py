@@ -1,7 +1,7 @@
 import sys
 
 from app.executor import handle_command
-from app.parser import Parser
+from app.lexer import Lexer
 
 def main():
     """
@@ -14,7 +14,7 @@ def main():
 
         line = input()
 
-        parts = Parser().parse(line)
+        parts = Lexer().tokenize(line)
 
         cmd = parts[0]
         args = parts[1:] if len(parts) > 1 else []

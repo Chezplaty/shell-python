@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app import executor, main, path_utils, shell_builtins
-from app.parser import Parser, ParseState, finish_token
+from app.lexer import Lexer, LexState, finish_token
 
 
 def make_executable(path: Path) -> None:
@@ -348,302 +348,302 @@ class TestFinishToken:
 
 
 # ---------------------------------------------------------------------------
-# Parser.disable_escape
+# Lexer.disable_escape
 # ---------------------------------------------------------------------------
 
 class TestDisableEscape:
     def test_sets_escaping_to_false(self):
-        parser = Parser()
-        parser._escaping = True
+        lexer = Lexer()
+        lexer._escaping = True
 
-        parser.disable_escape()
+        lexer.disable_escape()
 
-        assert parser._escaping is False
+        assert lexer._escaping is False
 
     def test_is_a_no_op_when_already_off(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.disable_escape()
+        lexer.disable_escape()
 
-        assert parser._escaping is False
+        assert lexer._escaping is False
 
 
 # ---------------------------------------------------------------------------
-# Parser.handle_normal_parse
+# Lexer.handle_normal
 # ---------------------------------------------------------------------------
 
-class TestHandleNormalParse:
+class TestHandleNormal:
     def test_appends_ordinary_character_to_current(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_normal_parse("a")
+        lexer.handle_normal("a")
 
-        assert parser._current == ["a"]
+        assert lexer._current == ["a"]
 
     def test_whitespace_finishes_current_token(self):
-        parser = Parser()
-        parser._current = ["h", "i"]
+        lexer = Lexer()
+        lexer._current = ["h", "i"]
 
-        parser.handle_normal_parse(" ")
+        lexer.handle_normal(" ")
 
-        assert parser._tokens == ["hi"]
-        assert parser._current == []
+        assert lexer._tokens == ["hi"]
+        assert lexer._current == []
 
     def test_whitespace_with_empty_current_does_not_add_empty_token(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_normal_parse(" ")
+        lexer.handle_normal(" ")
 
-        assert parser._tokens == []
+        assert lexer._tokens == []
 
     def test_single_quote_switches_state_to_single(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_normal_parse("'")
+        lexer.handle_normal("'")
 
-        assert parser._state == ParseState.SINGLE
-        assert parser._current == []
+        assert lexer._state == LexState.SINGLE
+        assert lexer._current == []
 
     def test_double_quote_switches_state_to_double(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_normal_parse('"')
+        lexer.handle_normal('"')
 
-        assert parser._state == ParseState.DOUBLE
-        assert parser._current == []
+        assert lexer._state == LexState.DOUBLE
+        assert lexer._current == []
 
     def test_backslash_turns_on_escaping_without_appending(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_normal_parse("\\")
+        lexer.handle_normal("\\")
 
-        assert parser._escaping is True
-        assert parser._current == []
+        assert lexer._escaping is True
+        assert lexer._current == []
 
     def test_escaping_appends_char_literally_and_turns_escaping_off(self):
-        parser = Parser()
-        parser._escaping = True
+        lexer = Lexer()
+        lexer._escaping = True
 
-        parser.handle_normal_parse(" ")
+        lexer.handle_normal(" ")
 
-        assert parser._current == [" "]
-        assert parser._escaping is False
+        assert lexer._current == [" "]
+        assert lexer._escaping is False
 
     def test_escaping_treats_quote_characters_as_literal(self):
-        parser = Parser()
-        parser._escaping = True
+        lexer = Lexer()
+        lexer._escaping = True
 
-        parser.handle_normal_parse("'")
+        lexer.handle_normal("'")
 
-        assert parser._current == ["'"]
-        assert parser._state == ParseState.NORMAL
+        assert lexer._current == ["'"]
+        assert lexer._state == LexState.NORMAL
 
 
 # ---------------------------------------------------------------------------
-# Parser.handle_single_parse
+# Lexer.handle_single
 # ---------------------------------------------------------------------------
 
-class TestHandleSingleParse:
+class TestHandleSingle:
     def test_appends_ordinary_character_to_current(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_single_parse("a")
+        lexer.handle_single("a")
 
-        assert parser._current == ["a"]
+        assert lexer._current == ["a"]
 
     def test_single_quote_switches_state_back_to_normal(self):
-        parser = Parser()
-        parser._state = ParseState.SINGLE
+        lexer = Lexer()
+        lexer._state = LexState.SINGLE
 
-        parser.handle_single_parse("'")
+        lexer.handle_single("'")
 
-        assert parser._state == ParseState.NORMAL
-        assert parser._current == []
+        assert lexer._state == LexState.NORMAL
+        assert lexer._current == []
 
     def test_backslash_is_appended_literally(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_single_parse("\\")
+        lexer.handle_single("\\")
 
-        assert parser._current == ["\\"]
+        assert lexer._current == ["\\"]
 
     def test_double_quote_is_appended_literally(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_single_parse('"')
+        lexer.handle_single('"')
 
-        assert parser._current == ['"']
+        assert lexer._current == ['"']
 
 
 # ---------------------------------------------------------------------------
-# Parser.handle_double_parse
+# Lexer.handle_double
 # ---------------------------------------------------------------------------
 
-class TestHandleDoubleParse:
+class TestHandleDouble:
     def test_appends_ordinary_character_to_current(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_double_parse("a")
+        lexer.handle_double("a")
 
-        assert parser._current == ["a"]
+        assert lexer._current == ["a"]
 
     def test_double_quote_switches_state_back_to_normal(self):
-        parser = Parser()
-        parser._state = ParseState.DOUBLE
+        lexer = Lexer()
+        lexer._state = LexState.DOUBLE
 
-        parser.handle_double_parse('"')
+        lexer.handle_double('"')
 
-        assert parser._state == ParseState.NORMAL
-        assert parser._current == []
+        assert lexer._state == LexState.NORMAL
+        assert lexer._current == []
 
     def test_backslash_turns_on_escaping_without_appending(self):
-        parser = Parser()
+        lexer = Lexer()
 
-        parser.handle_double_parse("\\")
+        lexer.handle_double("\\")
 
-        assert parser._escaping is True
-        assert parser._current == []
+        assert lexer._escaping is True
+        assert lexer._current == []
 
     def test_single_quote_has_no_special_meaning(self):
-        parser = Parser()
-        parser._state = ParseState.DOUBLE
+        lexer = Lexer()
+        lexer._state = LexState.DOUBLE
 
-        parser.handle_double_parse("'")
+        lexer.handle_double("'")
 
-        assert parser._current == ["'"]
-        assert parser._state == ParseState.DOUBLE
+        assert lexer._current == ["'"]
+        assert lexer._state == LexState.DOUBLE
 
-    @pytest.mark.parametrize("special_char", sorted(Parser.DOUBLE_ESCAPES))
+    @pytest.mark.parametrize("special_char", sorted(Lexer.DOUBLE_ESCAPES))
     def test_escaping_a_special_character_drops_the_backslash(self, special_char):
-        parser = Parser()
-        parser._escaping = True
+        lexer = Lexer()
+        lexer._escaping = True
 
-        parser.handle_double_parse(special_char)
+        lexer.handle_double(special_char)
 
-        assert parser._current == [special_char]
-        assert parser._escaping is False
+        assert lexer._current == [special_char]
+        assert lexer._escaping is False
 
     def test_escaping_an_ordinary_character_keeps_the_backslash(self):
-        parser = Parser()
-        parser._escaping = True
+        lexer = Lexer()
+        lexer._escaping = True
 
-        parser.handle_double_parse("a")
+        lexer.handle_double("a")
 
-        assert parser._current == ["\\", "a"]
-        assert parser._escaping is False
+        assert lexer._current == ["\\", "a"]
+        assert lexer._escaping is False
 
 
 # ---------------------------------------------------------------------------
-# Parser.parse
+# Lexer.tokenize
 # ---------------------------------------------------------------------------
 
-class TestParseCommand:
+class TestTokenize:
     def test_splits_on_single_space(self):
-        assert Parser().parse("echo hello") == ["echo", "hello"]
+        assert Lexer().tokenize("echo hello") == ["echo", "hello"]
 
     def test_collapses_repeated_whitespace(self):
-        assert Parser().parse("echo    hi     there") == ["echo", "hi", "there"]
+        assert Lexer().tokenize("echo    hi     there") == ["echo", "hi", "there"]
 
     def test_ignores_leading_and_trailing_whitespace(self):
-        assert Parser().parse("  echo hi  ") == ["echo", "hi"]
+        assert Lexer().tokenize("  echo hi  ") == ["echo", "hi"]
 
     def test_empty_line_returns_empty_list(self):
-        assert Parser().parse("") == []
+        assert Lexer().tokenize("") == []
 
     def test_whitespace_only_line_returns_empty_list(self):
-        assert Parser().parse("   ") == []
+        assert Lexer().tokenize("   ") == []
 
     def test_single_quotes_preserve_spaces_between_words(self):
-        assert Parser().parse("echo 'shell hello'") == ["echo", "shell hello"]
+        assert Lexer().tokenize("echo 'shell hello'") == ["echo", "shell hello"]
 
     def test_single_quotes_preserve_repeated_internal_whitespace(self):
-        assert Parser().parse("echo 'world     test'") == ["echo", "world     test"]
+        assert Lexer().tokenize("echo 'world     test'") == ["echo", "world     test"]
 
     def test_multiple_single_quoted_arguments(self):
-        result = Parser().parse("cat '/tmp/file name' '/tmp/file name with spaces'")
+        result = Lexer().tokenize("cat '/tmp/file name' '/tmp/file name with spaces'")
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
 
     def test_single_quotes_can_produce_empty_argument(self):
-        assert Parser().parse("echo ''") == ["echo"]
+        assert Lexer().tokenize("echo ''") == ["echo"]
 
     def test_single_quoted_argument_alone(self):
-        assert Parser().parse("'hello world'") == ["hello world"]
+        assert Lexer().tokenize("'hello world'") == ["hello world"]
 
     def test_mixes_quoted_and_unquoted_arguments(self):
-        result = Parser().parse("echo hello 'shell world' again")
+        result = Lexer().tokenize("echo hello 'shell world' again")
 
         assert result == ["echo", "hello", "shell world", "again"]
 
     def test_double_quotes_preserve_spaces_between_words(self):
-        assert Parser().parse('echo "shell hello"') == ["echo", "shell hello"]
+        assert Lexer().tokenize('echo "shell hello"') == ["echo", "shell hello"]
 
     def test_double_quotes_preserve_repeated_internal_whitespace(self):
-        assert Parser().parse('echo "world     test"') == ["echo", "world     test"]
+        assert Lexer().tokenize('echo "world     test"') == ["echo", "world     test"]
 
     def test_multiple_double_quoted_arguments(self):
-        result = Parser().parse('cat "/tmp/file name" "/tmp/file name with spaces"')
+        result = Lexer().tokenize('cat "/tmp/file name" "/tmp/file name with spaces"')
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
 
     def test_double_quotes_can_produce_empty_argument(self):
-        assert Parser().parse('echo ""') == ["echo"]
+        assert Lexer().tokenize('echo ""') == ["echo"]
 
     def test_double_quoted_argument_alone(self):
-        assert Parser().parse('"hello world"') == ["hello world"]
+        assert Lexer().tokenize('"hello world"') == ["hello world"]
 
     def test_mixes_double_quoted_and_unquoted_arguments(self):
-        result = Parser().parse('echo hello "shell world" again')
+        result = Lexer().tokenize('echo hello "shell world" again')
 
         assert result == ["echo", "hello", "shell world", "again"]
 
     def test_double_quotes_preserve_single_quote_inside(self):
-        result = Parser().parse("""echo "bar"  "shell's"  "foo" """)
+        result = Lexer().tokenize("""echo "bar"  "shell's"  "foo" """)
 
         assert result == ["echo", "bar", "shell's", "foo"]
 
     def test_double_quotes_escaped_double_quote_is_literal(self):
-        result = Parser().parse('echo "say \\"hi\\""')
+        result = Lexer().tokenize('echo "say \\"hi\\""')
 
         assert result == ["echo", 'say "hi"']
 
     def test_double_quotes_escaped_backslash_is_single_literal_backslash(self):
-        result = Parser().parse('echo "a\\\\b"')
+        result = Lexer().tokenize('echo "a\\\\b"')
 
         assert result == ["echo", "a\\b"]
 
     def test_double_quotes_escaped_dollar_sign_is_literal(self):
-        result = Parser().parse('echo "\\$HOME"')
+        result = Lexer().tokenize('echo "\\$HOME"')
 
         assert result == ["echo", "$HOME"]
 
     def test_double_quotes_escaped_backtick_is_literal(self):
-        result = Parser().parse('echo "\\`cmd\\`"')
+        result = Lexer().tokenize('echo "\\`cmd\\`"')
 
         assert result == ["echo", "`cmd`"]
 
     def test_double_quotes_escaped_newline_is_literal(self):
-        result = Parser().parse('echo "a\\\nb"')
+        result = Lexer().tokenize('echo "a\\\nb"')
 
         assert result == ["echo", "a\nb"]
 
     def test_double_quotes_escapes_multiple_special_characters_in_sequence(self):
         line = 'echo "' + '\\$' + '\\`' + '\\"' + '\\\\' + '"'
-        result = Parser().parse(line)
+        result = Lexer().tokenize(line)
 
         assert result == ["echo", '$`"\\']
 
     def test_double_quotes_escaped_ordinary_character_keeps_backslash(self):
         # 'a' is not a special character, so the backslash is preserved
         # literally alongside it rather than being consumed as an escape.
-        result = Parser().parse('echo "\\a"')
+        result = Lexer().tokenize('echo "\\a"')
 
         assert result == ["echo", "\\a"]
 
     def test_double_quotes_escaped_single_quote_keeps_backslash_since_not_special(self):
         # A single quote has no meaning inside double quotes, so it isn't in
         # the special-character set and the backslash before it is literal.
-        result = Parser().parse('echo "\\\'"')
+        result = Lexer().tokenize('echo "\\\'"')
 
         assert result == ["echo", "\\'"]
 
@@ -652,30 +652,30 @@ class TestParseCommand:
         # escaping is set but the string ends before a char arrives to apply
         # it to, so the backslash silently disappears.
         line = 'echo "abc' + '\\'
-        result = Parser().parse(line)
+        result = Lexer().tokenize(line)
 
         assert result == ["echo", "abc"]
 
     def test_single_quotes_preserve_backslashes_literally(self):
-        result = Parser().parse(r"echo 'multiple\\slashes'")
+        result = Lexer().tokenize(r"echo 'multiple\\slashes'")
 
         assert result == ["echo", "multiple\\\\slashes"]
 
     def test_backslash_escapes_a_following_space_into_a_literal_space(self):
-        result = Parser().parse(r"echo multiple\ \ \ \ spaces")
+        result = Lexer().tokenize(r"echo multiple\ \ \ \ spaces")
 
         assert result == ["echo", "multiple    spaces"]
 
     def test_backslash_escapes_quote_characters_outside_quotes(self):
-        result = Parser().parse("echo \\'\\\"literal quotes\\\"\\'")
+        result = Lexer().tokenize("echo \\'\\\"literal quotes\\\"\\'")
 
         assert result == ["echo", "'\"literal", "quotes\"'"]
 
     def test_backslash_before_ordinary_character_just_drops_the_backslash(self):
-        assert Parser().parse(r"echo ignore\_backslash") == ["echo", "ignore_backslash"]
+        assert Lexer().tokenize(r"echo ignore\_backslash") == ["echo", "ignore_backslash"]
 
     def test_backslash_escaped_backslash_produces_a_single_literal_backslash(self):
-        result = Parser().parse(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3")
+        result = Lexer().tokenize(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3")
 
         assert result == [
             "cat",
@@ -688,7 +688,7 @@ class TestParseCommand:
         # Known edge case: a backslash as the final character sets BACKSLASH
         # state but the loop ends before another char arrives, so it's never
         # appended anywhere and silently disappears.
-        assert Parser().parse("echo test\\") == ["echo", "test"]
+        assert Lexer().tokenize("echo test\\") == ["echo", "test"]
 
 
 # ---------------------------------------------------------------------------

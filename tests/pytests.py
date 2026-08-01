@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app import executor, main, path_utils, shell_builtins
-from app.main import parse_command
+from app.parser import parse_command
 
 
 def make_executable(path: Path) -> None:
@@ -377,6 +377,11 @@ class TestParseCommand:
         result = parse_command("""echo "bar"  "shell's"  "foo" """)
 
         assert result == ["echo", "bar", "shell's", "foo"]
+
+    def test_single_quotes_preserve_backslashes_literally(self):
+        result = parse_command(r"echo 'multiple\\slashes'")
+
+        assert result == ["echo", "multiple\\\\slashes"]
 
     def test_backslash_escapes_a_following_space_into_a_literal_space(self):
         result = parse_command(r"echo multiple\ \ \ \ spaces")

@@ -7,6 +7,7 @@ class ParseState(Enum):
     NORMAL = 1
     SINGLE = 2
     DOUBLE = 3
+    BACKSLASH = 4
 
 def finish_token(tokens: list[str], current: list[str]) -> None:
     """
@@ -38,6 +39,9 @@ def parse_command(line: str) -> list[str]:
             elif char == '"':
                 state = ParseState.DOUBLE
 
+            elif char == "\\": #checks for single backslash
+                state = ParseState.BACKSLASH
+
             else:
                 current.append(char)
             
@@ -59,6 +63,10 @@ def parse_command(line: str) -> list[str]:
         
             else:
                 current.append(char)
+
+        elif state == ParseState.BACKSLASH:
+            current.append(char)
+            state = ParseState.NORMAL
 
     #check for leftover token
     finish_token(tokens, current)

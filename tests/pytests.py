@@ -378,6 +378,35 @@ class TestParseCommand:
 
         assert result == ["echo", "bar", "shell's", "foo"]
 
+    def test_backslash_escapes_a_following_space_into_a_literal_space(self):
+        result = parse_command(r"echo multiple\ \ \ \ spaces")
+
+        assert result == ["echo", "multiple    spaces"]
+
+    def test_backslash_escapes_quote_characters_outside_quotes(self):
+        result = parse_command("echo \\'\\\"literal quotes\\\"\\'")
+
+        assert result == ["echo", "'\"literal", "quotes\"'"]
+
+    def test_backslash_before_ordinary_character_just_drops_the_backslash(self):
+        assert parse_command(r"echo ignore\_backslash") == ["echo", "ignore_backslash"]
+
+    def test_backslash_escaped_backslash_produces_a_single_literal_backslash(self):
+        result = parse_command(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3")
+
+        assert result == [
+            "cat",
+            "/tmp/_ignored_1",
+            "/tmp/ignore_2",
+            "/tmp/just_one_\\_3",
+        ]
+
+    def test_trailing_lone_backslash_is_dropped(self):
+        # Known edge case: a backslash as the final character sets BACKSLASH
+        # state but the loop ends before another char arrives, so it's never
+        # appended anywhere and silently disappears.
+        assert parse_command("echo test\\") == ["echo", "test"]
+
 
 # ---------------------------------------------------------------------------
 # main

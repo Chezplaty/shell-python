@@ -15,65 +15,141 @@ def finish_token(tokens: list[str], current: list[str]) -> None:
         tokens.append("".join(current))
         current.clear()
 
-def parse_command(line: str) -> list[str]:
+class Parser:
 
-    tokens = []
-    current = []
-    escaping = False
-    sp_chars = {'"', '\\', '$', '`', '\n'}
-    state = ParseState.NORMAL
+    #characters to escape in double quotes
+    DOUBLE_ESCAPES = {'"', '\\', '$', '`', '\n'}
 
-    for char in line:
+    def __init__(self):
+        self._tokens = []
+        self._current = []
+        self._escaping = False
+        self._state = ParseState.NORMAL
 
-        #separate characters by space only
-        if state == ParseState.NORMAL:
+    def parse(self, line: str) -> list[str]:
 
-            if escaping:
-                current.append(char)
-                escaping = False
+        for char in line:
+            if self._state == ParseState.NORMAL:
+                self.handle_normal_parse(char)
 
-            elif char.isspace():
-                finish_token(tokens, current)
+            elif self._state == ParseState.SINGLE:
+                self.handle_single_parse(char)
 
-            elif char == "'":
-                state = ParseState.SINGLE
+            elif self._state == ParseState.DOUBLE:
+                self.handle_double_parse(char)
 
-            elif char == '"':
-                state = ParseState.DOUBLE
+        finish_token(self._tokens, self._current)
+        return self._tokens
 
-            elif char == "\\":
-                escaping = True
+    def turn_escape_off(self) -> None:
+        self._escaping = False
 
-            else:
-                current.append(char)
+    def handle_normal_parse(self, char: str) -> None:
 
-        elif state == ParseState.SINGLE:
+        if self._escaping:
+            self._current.append(char)
+            self.turn_escape_off()
 
-            if char == "'":
-                state = ParseState.NORMAL
+        elif char.isspace():
+            finish_token(self._tokens, self._current)
 
-            else:
-                current.append(char)
+        elif char == "'":
+            self._state = ParseState.SINGLE
 
-        #TODO: handle special character exceptions
-        elif state == ParseState.DOUBLE:
+        elif char == '"':
+            self._state = ParseState.DOUBLE
 
-            if escaping:
-                if char not in sp_chars:
-                    current.append('\\')
-                current.append(char)
-                escaping = False
+        elif char == '\\':
+            self._escaping = True
 
-            elif char == '"':
-                state = ParseState.NORMAL
+        else:
+            self._current.append(char)
 
-            elif char == '\\':
-                escaping = True
+    def handle_single_parse(self, char: str) -> None:
 
-            else:
-                current.append(char)
+        if char == "'":
+            self._state = ParseState.NORMAL
+        
+        else:
+            self._current.append(char)
 
-    #TODO: check if state is in NORMAL, keep prompting user if in quote mode
-    finish_token(tokens, current)
+    #TODO: handle special character exceptions
+    def handle_double_parse(self, char: str) -> None:
 
-    return tokens
+        if self._escaping:
+            if char not in self.DOUBLE_ESCAPES:
+                self._current.append('\\')
+            self._current.append(char)
+            self.turn_escape_off()
+
+        elif char == '"':
+            self._state = ParseState.NORMAL
+        
+        elif char == '\\':
+            self._escaping = True
+        
+        else:
+            self._current.append(char)
+
+# def parse_command(line: str) -> list[str]:
+
+#     tokens = []
+#     current = []
+#     escaping = False
+#     sp_chars = {'"', '\\', '$', '`', '\n'}
+#     state = ParseState.NORMAL
+
+#     for char in line:
+
+#         #separate characters by space only
+#         if state == ParseState.NORMAL:
+
+#             if escaping:
+#                 current.append(char)
+#                 escaping = False
+
+#             elif char.isspace():
+#                 finish_token(tokens, current)
+
+#             elif char == "'":
+#                 state = ParseState.SINGLE
+
+#             elif char == '"':
+#                 state = ParseState.DOUBLE
+
+#             elif char == "\\":
+#                 escaping = True
+
+#             else:
+#                 current.append(char)
+
+#         elif state == ParseState.SINGLE:
+
+#             if char == "'":
+#                 state = ParseState.NORMAL
+
+#             else:
+#                 current.append(char)
+
+#         #TODO: handle special character exceptions
+#         elif state == ParseState.DOUBLE:
+
+#             if escaping:
+#                 if char not in sp_chars:
+#                     current.append('\\')
+#                 current.append(char)
+#                 escaping = False
+
+#             elif char == '"':
+#                 state = ParseState.NORMAL
+
+#             elif char == '\\':
+#                 escaping = True
+
+#             else:
+#                 current.append(char)
+
+#     #TODO: check if state is in NORMAL, keep prompting user if in quote mode
+#     finish_token(tokens, current)
+
+#     return tokens

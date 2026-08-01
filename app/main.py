@@ -1,7 +1,7 @@
 import sys
 
 from app.executor import handle_command
-from app.parser import parse_command
+from app.parser import Parser
 
 def main():
     """
@@ -14,7 +14,7 @@ def main():
 
         line = input()
 
-        parts = parse_command(line)
+        parts = Parser().parse(line)
 
         cmd = parts[0]
         args = parts[1:] if len(parts) > 1 else []

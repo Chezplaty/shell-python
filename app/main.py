@@ -2,7 +2,9 @@ import sys
 
 from app.executor import handle_command
 from app.lexer import Lexer
-from app.parser import parse
+from app.parser import parse, ParseError
+
+
 
 def main():
     """
@@ -17,13 +19,12 @@ def main():
 
         tokens = Lexer().tokenize(line)
 
-        instruction = parse(tokens)
-        if not instruction: #error
+        try:
+            instruction = parse(tokens)
+        except ParseError as e:
+            print(f"shell: {e}")
             continue
-
-        #cmd = parts[0]
-        #args = parts[1:] if len(parts) > 1 else []
-
+        
         if instruction.cmd == "exit":
             break
 

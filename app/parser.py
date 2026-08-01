@@ -1,9 +1,13 @@
-from enum import Enum
+from enum import Enum, auto
 
 class ParseState(Enum):
-    NORMAL = 1
-    SINGLE = 2
-    DOUBLE = 3
+    NORMAL = auto()
+    SINGLE = auto()
+    DOUBLE = auto()
+
+class TokenType(Enum):
+    WORD = auto()
+    OUTPUT = auto()
 
 def finish_token(tokens: list[str], current: list[str]) -> None:
     """
@@ -11,8 +15,15 @@ def finish_token(tokens: list[str], current: list[str]) -> None:
     Clears the current token buffer so parsing can continue with the next token.
     """
 
+    token_type = TokenType.WORD
+
     if current:
-        tokens.append("".join(current))
+
+        token = "".join(current)
+        if token == '>' or token == '1>':
+            token_type = TokenType.OUTPUT
+
+        tokens.append(token)
         current.clear()
 
 class Parser:

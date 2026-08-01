@@ -351,6 +351,33 @@ class TestParseCommand:
 
         assert result == ["echo", "hello", "shell world", "again"]
 
+    def test_double_quotes_preserve_spaces_between_words(self):
+        assert parse_command('echo "shell hello"') == ["echo", "shell hello"]
+
+    def test_double_quotes_preserve_repeated_internal_whitespace(self):
+        assert parse_command('echo "world     test"') == ["echo", "world     test"]
+
+    def test_multiple_double_quoted_arguments(self):
+        result = parse_command('cat "/tmp/file name" "/tmp/file name with spaces"')
+
+        assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
+
+    def test_double_quotes_can_produce_empty_argument(self):
+        assert parse_command('echo ""') == ["echo"]
+
+    def test_double_quoted_argument_alone(self):
+        assert parse_command('"hello world"') == ["hello world"]
+
+    def test_mixes_double_quoted_and_unquoted_arguments(self):
+        result = parse_command('echo hello "shell world" again')
+
+        assert result == ["echo", "hello", "shell world", "again"]
+
+    def test_double_quotes_preserve_single_quote_inside(self):
+        result = parse_command("""echo "bar"  "shell's"  "foo" """)
+
+        assert result == ["echo", "bar", "shell's", "foo"]
+
 
 # ---------------------------------------------------------------------------
 # main

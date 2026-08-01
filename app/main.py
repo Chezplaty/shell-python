@@ -9,6 +9,10 @@ class ParseState(Enum):
     DOUBLE = 3
 
 def finish_token(tokens: list[str], current: list[str]) -> None:
+    """
+    Finalizes the current token by appending it to the token list if it is non-empty.
+    Clears the current token buffer so parsing can continue with the next token.
+    """
 
     if current:
         tokens.append("".join(current))
@@ -31,7 +35,8 @@ def parse_command(line: str) -> list[str]:
             elif char == "'":
                 state = ParseState.SINGLE
 
-            #TODO: implement Double state
+            elif char == '"':
+                state = ParseState.DOUBLE
 
             else:
                 current.append(char)
@@ -42,6 +47,16 @@ def parse_command(line: str) -> list[str]:
                 finish_token(tokens, current)
                 state = ParseState.NORMAL
 
+            else:
+                current.append(char)
+
+        #TODO: handle special character exceptions
+        elif state == ParseState.DOUBLE:
+        
+            if char == '"':
+                finish_token(tokens, current)
+                state = ParseState.NORMAL
+        
             else:
                 current.append(char)
 

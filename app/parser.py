@@ -1,15 +1,6 @@
 from app.lexer import Token, TokenType
 from collections import namedtuple
-
-
-#TODO: implement raising errors that are caught by main and printed out
-class ParseError(Exception):
-    def __init__(self, message: str):
-        self.message = message
-
-    def __str__(self):
-        return self.message
-
+from app.errors import ParseError
 
 class Instruction:
 

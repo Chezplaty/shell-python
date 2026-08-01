@@ -1,10 +1,8 @@
 import sys
-
+from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
 from app.lexer import Lexer
-from app.parser import parse, ParseError
-
-
+from app.parser import parse
 
 def main():
     """
@@ -24,11 +22,14 @@ def main():
         except ParseError as e:
             print(f"shell: {e}")
             continue
-        
+
         if instruction.cmd == "exit":
             break
 
-        handle_command(instruction)
+        try:
+            handle_command(instruction)
+        except BuiltinError as e:
+            print(e)
 
 if __name__ == "__main__":
     main()

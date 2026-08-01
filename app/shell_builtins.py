@@ -4,17 +4,17 @@ from pathlib import Path
 from app.path_utils import get_executable
 from app.lexer import TokenType
 
-#TODO: create separate function to print out error messages
+from app.errors import BuiltinError
 
-def handle_cd(args: list[str]) -> None:
+def handle_cd(instruction: Instruction) -> None:
     """
     Checks if given directory exists.
     Changes into directory if found, otherwise prints an error message.
     """
-
+    args = instruction.args
+    
     if len(args) > 1:
-        print(f"cd: too many arguments")
-        return
+        raise BuiltinError("cd", "too many arguments")
 
     #path is home directory if args is nothing or ~
     path = Path.home() if not args or args[0] == '~' else args[0]
@@ -29,25 +29,24 @@ def handle_cd(args: list[str]) -> None:
     except PermissionError:
         print(f"cd: {path}: Permission denied")
 
-def handle_pwd(args: list[str]) -> None:
+def handle_pwd(instruction: Instruction) -> None:
     """
     Prints the current working directory.
-    Prints an error message if there are other arguments.
+    Raises an exception if there are other arguments.
     """
 
-    if args:
-        print("pwd: too many arguments")
-        return
+    if instruction.args:
+        raise BuiltinError("pwd", "too many arguments")
 
     print(Path.cwd())
 
-def handle_type(args: list[str]) -> None:
+def handle_type(instruction: Instruction) -> None:
     """
     Handles the shell's type builtin by identifying whether a command is built in or external.
     Prints the command's location if it exists in PATH, or a not found message otherwise.
     """
 
-    for cmd in args:
+    for cmd in instruction.args:
         if cmd in BUILTINS:
             print(f"{cmd} is a shell builtin")
             continue
@@ -78,7 +77,6 @@ def handle_echo(instruction: Instruction) -> None:
                     print(f"echo: {redirect.target}: No such file or directory")
                 #TODO: check between access denied and target just being a directory
                 except PermissionError:
-
                     print(f"echo: {redirect.target}: Permission denied")
     else:
         print(output)

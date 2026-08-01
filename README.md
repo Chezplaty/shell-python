@@ -1,34 +1,24 @@
-[![progress-banner](https://backend.codecrafters.io/progress/shell/d412c18c-f8e8-4e3c-bf96-b5798f5fdc4f)](https://app.codecrafters.io/users/Chezplaty?r=2qF)
+# shell-python
 
-This is a starting point for Python solutions to the
-["Build Your Own Shell" Challenge](https://app.codecrafters.io/courses/shell/overview).
+A POSIX-style shell implemented in Python. It supports command parsing (including
+quoting), builtin commands (`cd`, `pwd`, `echo`, and more), and running external
+programs on `PATH`.
 
-In this challenge, you'll build your own POSIX compliant shell that's capable of
-interpreting shell commands, running external programs and builtin commands like
-cd, pwd, echo and more. Along the way, you'll learn about shell command parsing,
-REPLs, builtin commands, and more.
-
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
-
-# Passing the first stage
-
-The entry point for your `shell` implementation is in `app/main.py`. Study and
-uncomment the relevant code, then run the command below to execute the tests on
-our servers:
+## Setup
 
 ```sh
-codecrafters submit
+python3 -m venv venv
+./venv/bin/pip install -e ".[dev]"
 ```
 
-Time to move on to the next stage!
+## Running
 
-# Stage 2 & beyond
+```sh
+./your_program.sh
+```
 
-Note: This section is for stages 2 and beyond.
+## Testing
 
-1. Ensure you have `uv` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `app/main.py`.
-1. Run `codecrafters submit` to submit your solution to CodeCrafters. Test
-   output will be streamed to your terminal.
+```sh
+./venv/bin/pytest
+```

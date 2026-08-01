@@ -1,6 +1,47 @@
 import sys
 
 from app.executor import handle_command
+from enum import Enum
+
+class ParseState(Enum):
+    NORMAL = 1
+    SINGLE = 2
+    DOUBLE = 3
+
+def parse_command(line: str) -> list[str]:
+
+    parts = []
+    current = []
+    state = ParseState.NORMAL
+    
+    for char in line:
+
+        #separate characters by space only
+        if state == ParseState.NORMAL:
+
+            if char.isspace():
+                parts.extend(current)
+                current = []
+
+            elif char == "'":
+                state = ParseState.SINGLE
+
+            #TODO: implement Double state
+
+            else:
+                current.append(char)
+            
+        elif state == ParseState.SINGLE:
+
+            if char == "'":
+                parts.extend(current)
+                current = []
+                state = ParseState.NORMAL
+
+            else:
+                current.append(char)
+
+    return parts
 
 def main():
     """
@@ -13,7 +54,8 @@ def main():
 
         line = input()
 
-        parts = line.split()
+        parts = parse_command(line)
+
         cmd = parts[0]
         args = parts[1:] if len(parts) > 1 else []
 

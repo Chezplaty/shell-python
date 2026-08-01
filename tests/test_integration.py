@@ -108,7 +108,7 @@ class TestCdBuiltin:
 
         out, _ = run_shell([f"cd {file_path}", "exit"], cwd=tmp_path)
 
-        assert f"cd {file_path}: Not a directory\n" in out
+        assert f"cd: {file_path}: Not a directory\n" in out
 
     @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses directory permission checks")
     def test_cd_into_unreadable_directory_prints_permission_denied(self, tmp_path):

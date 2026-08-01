@@ -5,12 +5,22 @@ from pathlib import Path
 import pytest
 
 from app import executor, main, path_utils, shell_builtins
+from app.errors import BuiltinError
 from app.lexer import Lexer, LexState, finish_token
+from app.parser import Instruction
 
 
 def make_executable(path: Path) -> None:
     path.write_text("#!/bin/sh\necho hi\n")
     path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def make_instruction(cmd: str, args: list[str] | None = None, redirects: list | None = None) -> Instruction:
+    return Instruction(cmd, args if args is not None else [], redirects if redirects is not None else [])
+
+
+def token_values(tokens: list) -> list[str]:
+    return [token.value for token in tokens]
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +117,7 @@ class TestHandleExternalPrograms:
 class TestHandleType:
     @pytest.mark.parametrize("builtin_cmd", sorted(shell_builtins.BUILTINS))
     def test_reports_shell_builtin_for_each_builtin(self, builtin_cmd, capsys):
-        shell_builtins.handle_type([builtin_cmd])
+        shell_builtins.handle_type(make_instruction("type", [builtin_cmd]))
 
         captured = capsys.readouterr()
         assert captured.out == f"{builtin_cmd} is a shell builtin\n"
@@ -115,7 +125,7 @@ class TestHandleType:
     def test_reports_path_for_external_command(self, monkeypatch, capsys):
         monkeypatch.setattr(shell_builtins, "get_executable", lambda cmd: Path("/usr/bin/ls"))
 
-        shell_builtins.handle_type(["ls"])
+        shell_builtins.handle_type(make_instruction("type", ["ls"]))
 
         captured = capsys.readouterr()
         assert captured.out == "ls is /usr/bin/ls\n"
@@ -123,7 +133,7 @@ class TestHandleType:
     def test_reports_not_found_for_unknown_command(self, monkeypatch, capsys):
         monkeypatch.setattr(shell_builtins, "get_executable", lambda cmd: None)
 
-        shell_builtins.handle_type(["bogus"])
+        shell_builtins.handle_type(make_instruction("type", ["bogus"]))
 
         captured = capsys.readouterr()
         assert captured.out == "bogus: not found\n"
@@ -131,7 +141,7 @@ class TestHandleType:
     def test_builtin_takes_precedence_over_path_lookup(self, monkeypatch, capsys):
         monkeypatch.setattr(shell_builtins, "get_executable", lambda cmd: Path("/usr/bin/echo"))
 
-        shell_builtins.handle_type(["echo"])
+        shell_builtins.handle_type(make_instruction("type", ["echo"]))
 
         captured = capsys.readouterr()
         assert captured.out == "echo is a shell builtin\n"
@@ -141,7 +151,7 @@ class TestHandleType:
             shell_builtins, "get_executable", lambda cmd: Path("/usr/bin/ls") if cmd == "ls" else None
         )
 
-        shell_builtins.handle_type(["echo", "ls", "bogus"])
+        shell_builtins.handle_type(make_instruction("type", ["echo", "ls", "bogus"]))
 
         captured = capsys.readouterr()
         assert captured.out == (
@@ -160,7 +170,7 @@ class TestHandleCd:
         calls = []
         monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        shell_builtins.handle_cd(["/some/dir"])
+        shell_builtins.handle_cd(make_instruction("cd", ["/some/dir"]))
 
         assert calls == ["/some/dir"]
 
@@ -170,7 +180,7 @@ class TestHandleCd:
         calls = []
         monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        shell_builtins.handle_cd(["~"])
+        shell_builtins.handle_cd(make_instruction("cd", ["~"]))
 
         assert calls == [home]
 
@@ -180,51 +190,51 @@ class TestHandleCd:
         calls = []
         monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        shell_builtins.handle_cd(["~"])
+        shell_builtins.handle_cd(make_instruction("cd", ["~"]))
 
         assert calls == [home]
         assert calls != ["~"]
 
-    def test_prints_error_for_too_many_arguments(self, monkeypatch, capsys):
+    def test_raises_error_for_too_many_arguments(self, monkeypatch):
         monkeypatch.setattr(os, "chdir", lambda path: pytest.fail("should not chdir"))
 
-        shell_builtins.handle_cd(["dir1", "dir2"])
+        with pytest.raises(BuiltinError) as exc_info:
+            shell_builtins.handle_cd(make_instruction("cd", ["dir1", "dir2"]))
 
-        captured = capsys.readouterr()
-        assert captured.out == "cd: too many arguments\n"
+        assert str(exc_info.value) == "cd: too many arguments"
 
-    def test_prints_error_when_directory_not_found(self, monkeypatch, capsys):
+    def test_raises_error_when_directory_not_found(self, monkeypatch):
         def raise_not_found(path):
-            raise FileNotFoundError
+            raise FileNotFoundError(2, "No such file or directory")
 
         monkeypatch.setattr(os, "chdir", raise_not_found)
 
-        shell_builtins.handle_cd(["/does/not/exist"])
+        with pytest.raises(BuiltinError) as exc_info:
+            shell_builtins.handle_cd(make_instruction("cd", ["/does/not/exist"]))
 
-        captured = capsys.readouterr()
-        assert captured.out == "cd: /does/not/exist: No such file or directory\n"
+        assert str(exc_info.value) == "cd: /does/not/exist: No such file or directory"
 
-    def test_prints_error_when_path_is_not_a_directory(self, monkeypatch, capsys):
+    def test_raises_error_when_path_is_not_a_directory(self, monkeypatch):
         def raise_not_a_directory(path):
-            raise NotADirectoryError
+            raise NotADirectoryError(20, "Not a directory")
 
         monkeypatch.setattr(os, "chdir", raise_not_a_directory)
 
-        shell_builtins.handle_cd(["/some/file"])
+        with pytest.raises(BuiltinError) as exc_info:
+            shell_builtins.handle_cd(make_instruction("cd", ["/some/file"]))
 
-        captured = capsys.readouterr()
-        assert captured.out == "cd /some/file: Not a directory\n"
+        assert str(exc_info.value) == "cd: /some/file: Not a directory"
 
-    def test_prints_error_when_permission_denied(self, monkeypatch, capsys):
+    def test_raises_error_when_permission_denied(self, monkeypatch):
         def raise_permission_error(path):
-            raise PermissionError
+            raise PermissionError(13, "Permission denied")
 
         monkeypatch.setattr(os, "chdir", raise_permission_error)
 
-        shell_builtins.handle_cd(["/locked"])
+        with pytest.raises(BuiltinError) as exc_info:
+            shell_builtins.handle_cd(make_instruction("cd", ["/locked"]))
 
-        captured = capsys.readouterr()
-        assert captured.out == "cd: /locked: Permission denied\n"
+        assert str(exc_info.value) == "cd: /locked: Permission denied"
 
     def test_bare_cd_with_no_arguments_changes_to_home_directory(self, monkeypatch):
         home = Path("/home/user")
@@ -232,7 +242,7 @@ class TestHandleCd:
         calls = []
         monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        shell_builtins.handle_cd([])
+        shell_builtins.handle_cd(make_instruction("cd", []))
 
         assert calls == [home]
 
@@ -245,23 +255,24 @@ class TestHandlePwd:
     def test_prints_current_working_directory(self, monkeypatch, capsys, tmp_path):
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        shell_builtins.handle_pwd([])
+        shell_builtins.handle_pwd(make_instruction("pwd", []))
 
         captured = capsys.readouterr()
         assert captured.out == f"{tmp_path}\n"
 
-    def test_prints_error_for_extra_arguments(self, monkeypatch, capsys, tmp_path):
+    def test_raises_error_for_extra_arguments(self, monkeypatch, tmp_path):
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        shell_builtins.handle_pwd(["extra"])
+        with pytest.raises(BuiltinError) as exc_info:
+            shell_builtins.handle_pwd(make_instruction("pwd", ["extra"]))
 
-        captured = capsys.readouterr()
-        assert captured.out == "pwd: too many arguments\n"
+        assert str(exc_info.value) == "pwd: too many arguments"
 
     def test_does_not_print_cwd_when_extra_arguments(self, monkeypatch, capsys, tmp_path):
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        shell_builtins.handle_pwd(["extra", "args"])
+        with pytest.raises(BuiltinError):
+            shell_builtins.handle_pwd(make_instruction("pwd", ["extra", "args"]))
 
         captured = capsys.readouterr()
         assert str(tmp_path) not in captured.out
@@ -273,22 +284,22 @@ class TestHandlePwd:
 
 class TestHandleCommand:
     def test_echo_prints_joined_args(self, capsys):
-        executor.handle_command("echo", ["hello", "world"])
+        executor.handle_command(make_instruction("echo", ["hello", "world"]))
 
         captured = capsys.readouterr()
         assert captured.out == "hello world\n"
 
     def test_echo_with_no_args_prints_blank_line(self, capsys):
-        executor.handle_command("echo", [])
+        executor.handle_command(make_instruction("echo", []))
 
         captured = capsys.readouterr()
         assert captured.out == "\n"
 
     def test_type_delegates_to_handle_type_with_all_args(self, monkeypatch):
         seen = []
-        monkeypatch.setitem(shell_builtins.BUILTINS, "type", lambda args: seen.append(args))
+        monkeypatch.setitem(shell_builtins.BUILTINS, "type", lambda instruction: seen.append(instruction.args))
 
-        executor.handle_command("type", ["echo", "ls"])
+        executor.handle_command(make_instruction("type", ["echo", "ls"]))
 
         assert seen == [["echo", "ls"]]
 
@@ -298,12 +309,12 @@ class TestHandleCommand:
             executor, "handle_external_programs", lambda cmd, args: seen.append((cmd, args))
         )
 
-        executor.handle_command("ls", ["-la"])
+        executor.handle_command(make_instruction("ls", ["-la"]))
 
         assert seen == [("ls", ["-la"])]
 
     def test_exact_match_required_not_prefix(self, capsys):
-        executor.handle_command("echoing", ["surprise"])
+        executor.handle_command(make_instruction("echoing", ["surprise"]))
 
         captured = capsys.readouterr()
         assert captured.out == "echoing: command not found\n"
@@ -320,7 +331,7 @@ class TestFinishToken:
 
         finish_token(tokens, current)
 
-        assert tokens == ["hi"]
+        assert token_values(tokens) == ["hi"]
 
     def test_clears_current_after_appending(self):
         tokens = []
@@ -344,7 +355,8 @@ class TestFinishToken:
 
         finish_token(tokens, current)
 
-        assert tokens == ["echo", "hi"]
+        assert tokens[0] == "echo"
+        assert token_values(tokens[1:]) == ["hi"]
 
 
 # ---------------------------------------------------------------------------
@@ -386,7 +398,7 @@ class TestHandleNormal:
 
         lexer.handle_normal(" ")
 
-        assert lexer._tokens == ["hi"]
+        assert token_values(lexer._tokens) == ["hi"]
         assert lexer._current == []
 
     def test_whitespace_with_empty_current_does_not_add_empty_token(self):
@@ -539,13 +551,13 @@ class TestHandleDouble:
 
 class TestTokenize:
     def test_splits_on_single_space(self):
-        assert Lexer().tokenize("echo hello") == ["echo", "hello"]
+        assert token_values(Lexer().tokenize("echo hello")) == ["echo", "hello"]
 
     def test_collapses_repeated_whitespace(self):
-        assert Lexer().tokenize("echo    hi     there") == ["echo", "hi", "there"]
+        assert token_values(Lexer().tokenize("echo    hi     there")) == ["echo", "hi", "there"]
 
     def test_ignores_leading_and_trailing_whitespace(self):
-        assert Lexer().tokenize("  echo hi  ") == ["echo", "hi"]
+        assert token_values(Lexer().tokenize("  echo hi  ")) == ["echo", "hi"]
 
     def test_empty_line_returns_empty_list(self):
         assert Lexer().tokenize("") == []
@@ -554,96 +566,96 @@ class TestTokenize:
         assert Lexer().tokenize("   ") == []
 
     def test_single_quotes_preserve_spaces_between_words(self):
-        assert Lexer().tokenize("echo 'shell hello'") == ["echo", "shell hello"]
+        assert token_values(Lexer().tokenize("echo 'shell hello'")) == ["echo", "shell hello"]
 
     def test_single_quotes_preserve_repeated_internal_whitespace(self):
-        assert Lexer().tokenize("echo 'world     test'") == ["echo", "world     test"]
+        assert token_values(Lexer().tokenize("echo 'world     test'")) == ["echo", "world     test"]
 
     def test_multiple_single_quoted_arguments(self):
-        result = Lexer().tokenize("cat '/tmp/file name' '/tmp/file name with spaces'")
+        result = token_values(Lexer().tokenize("cat '/tmp/file name' '/tmp/file name with spaces'"))
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
 
     def test_single_quotes_can_produce_empty_argument(self):
-        assert Lexer().tokenize("echo ''") == ["echo"]
+        assert token_values(Lexer().tokenize("echo ''")) == ["echo"]
 
     def test_single_quoted_argument_alone(self):
-        assert Lexer().tokenize("'hello world'") == ["hello world"]
+        assert token_values(Lexer().tokenize("'hello world'")) == ["hello world"]
 
     def test_mixes_quoted_and_unquoted_arguments(self):
-        result = Lexer().tokenize("echo hello 'shell world' again")
+        result = token_values(Lexer().tokenize("echo hello 'shell world' again"))
 
         assert result == ["echo", "hello", "shell world", "again"]
 
     def test_double_quotes_preserve_spaces_between_words(self):
-        assert Lexer().tokenize('echo "shell hello"') == ["echo", "shell hello"]
+        assert token_values(Lexer().tokenize('echo "shell hello"')) == ["echo", "shell hello"]
 
     def test_double_quotes_preserve_repeated_internal_whitespace(self):
-        assert Lexer().tokenize('echo "world     test"') == ["echo", "world     test"]
+        assert token_values(Lexer().tokenize('echo "world     test"')) == ["echo", "world     test"]
 
     def test_multiple_double_quoted_arguments(self):
-        result = Lexer().tokenize('cat "/tmp/file name" "/tmp/file name with spaces"')
+        result = token_values(Lexer().tokenize('cat "/tmp/file name" "/tmp/file name with spaces"'))
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
 
     def test_double_quotes_can_produce_empty_argument(self):
-        assert Lexer().tokenize('echo ""') == ["echo"]
+        assert token_values(Lexer().tokenize('echo ""')) == ["echo"]
 
     def test_double_quoted_argument_alone(self):
-        assert Lexer().tokenize('"hello world"') == ["hello world"]
+        assert token_values(Lexer().tokenize('"hello world"')) == ["hello world"]
 
     def test_mixes_double_quoted_and_unquoted_arguments(self):
-        result = Lexer().tokenize('echo hello "shell world" again')
+        result = token_values(Lexer().tokenize('echo hello "shell world" again'))
 
         assert result == ["echo", "hello", "shell world", "again"]
 
     def test_double_quotes_preserve_single_quote_inside(self):
-        result = Lexer().tokenize("""echo "bar"  "shell's"  "foo" """)
+        result = token_values(Lexer().tokenize("""echo "bar"  "shell's"  "foo" """))
 
         assert result == ["echo", "bar", "shell's", "foo"]
 
     def test_double_quotes_escaped_double_quote_is_literal(self):
-        result = Lexer().tokenize('echo "say \\"hi\\""')
+        result = token_values(Lexer().tokenize('echo "say \\"hi\\""'))
 
         assert result == ["echo", 'say "hi"']
 
     def test_double_quotes_escaped_backslash_is_single_literal_backslash(self):
-        result = Lexer().tokenize('echo "a\\\\b"')
+        result = token_values(Lexer().tokenize('echo "a\\\\b"'))
 
         assert result == ["echo", "a\\b"]
 
     def test_double_quotes_escaped_dollar_sign_is_literal(self):
-        result = Lexer().tokenize('echo "\\$HOME"')
+        result = token_values(Lexer().tokenize('echo "\\$HOME"'))
 
         assert result == ["echo", "$HOME"]
 
     def test_double_quotes_escaped_backtick_is_literal(self):
-        result = Lexer().tokenize('echo "\\`cmd\\`"')
+        result = token_values(Lexer().tokenize('echo "\\`cmd\\`"'))
 
         assert result == ["echo", "`cmd`"]
 
     def test_double_quotes_escaped_newline_is_literal(self):
-        result = Lexer().tokenize('echo "a\\\nb"')
+        result = token_values(Lexer().tokenize('echo "a\\\nb"'))
 
         assert result == ["echo", "a\nb"]
 
     def test_double_quotes_escapes_multiple_special_characters_in_sequence(self):
         line = 'echo "' + '\\$' + '\\`' + '\\"' + '\\\\' + '"'
-        result = Lexer().tokenize(line)
+        result = token_values(Lexer().tokenize(line))
 
         assert result == ["echo", '$`"\\']
 
     def test_double_quotes_escaped_ordinary_character_keeps_backslash(self):
         # 'a' is not a special character, so the backslash is preserved
         # literally alongside it rather than being consumed as an escape.
-        result = Lexer().tokenize('echo "\\a"')
+        result = token_values(Lexer().tokenize('echo "\\a"'))
 
         assert result == ["echo", "\\a"]
 
     def test_double_quotes_escaped_single_quote_keeps_backslash_since_not_special(self):
         # A single quote has no meaning inside double quotes, so it isn't in
         # the special-character set and the backslash before it is literal.
-        result = Lexer().tokenize('echo "\\\'"')
+        result = token_values(Lexer().tokenize('echo "\\\'"'))
 
         assert result == ["echo", "\\'"]
 
@@ -652,30 +664,30 @@ class TestTokenize:
         # escaping is set but the string ends before a char arrives to apply
         # it to, so the backslash silently disappears.
         line = 'echo "abc' + '\\'
-        result = Lexer().tokenize(line)
+        result = token_values(Lexer().tokenize(line))
 
         assert result == ["echo", "abc"]
 
     def test_single_quotes_preserve_backslashes_literally(self):
-        result = Lexer().tokenize(r"echo 'multiple\\slashes'")
+        result = token_values(Lexer().tokenize(r"echo 'multiple\\slashes'"))
 
         assert result == ["echo", "multiple\\\\slashes"]
 
     def test_backslash_escapes_a_following_space_into_a_literal_space(self):
-        result = Lexer().tokenize(r"echo multiple\ \ \ \ spaces")
+        result = token_values(Lexer().tokenize(r"echo multiple\ \ \ \ spaces"))
 
         assert result == ["echo", "multiple    spaces"]
 
     def test_backslash_escapes_quote_characters_outside_quotes(self):
-        result = Lexer().tokenize("echo \\'\\\"literal quotes\\\"\\'")
+        result = token_values(Lexer().tokenize("echo \\'\\\"literal quotes\\\"\\'"))
 
         assert result == ["echo", "'\"literal", "quotes\"'"]
 
     def test_backslash_before_ordinary_character_just_drops_the_backslash(self):
-        assert Lexer().tokenize(r"echo ignore\_backslash") == ["echo", "ignore_backslash"]
+        assert token_values(Lexer().tokenize(r"echo ignore\_backslash")) == ["echo", "ignore_backslash"]
 
     def test_backslash_escaped_backslash_produces_a_single_literal_backslash(self):
-        result = Lexer().tokenize(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3")
+        result = token_values(Lexer().tokenize(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3"))
 
         assert result == [
             "cat",
@@ -688,7 +700,7 @@ class TestTokenize:
         # Known edge case: a backslash as the final character sets BACKSLASH
         # state but the loop ends before another char arrives, so it's never
         # appended anywhere and silently disappears.
-        assert Lexer().tokenize("echo test\\") == ["echo", "test"]
+        assert token_values(Lexer().tokenize("echo test\\")) == ["echo", "test"]
 
 
 # ---------------------------------------------------------------------------
@@ -699,7 +711,9 @@ class TestMain:
     def test_exits_immediately_on_exit_command(self, monkeypatch, capsys):
         monkeypatch.setattr("builtins.input", lambda: "exit")
         calls = []
-        monkeypatch.setattr(main, "handle_command", lambda cmd, args: calls.append((cmd, args)))
+        monkeypatch.setattr(
+            main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
+        )
 
         main.main()
 
@@ -710,7 +724,9 @@ class TestMain:
         inputs = iter(["echo hi", "type ls", "exit"])
         monkeypatch.setattr("builtins.input", lambda: next(inputs))
         calls = []
-        monkeypatch.setattr(main, "handle_command", lambda cmd, args: calls.append((cmd, args)))
+        monkeypatch.setattr(
+            main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
+        )
 
         main.main()
 
@@ -720,16 +736,26 @@ class TestMain:
         inputs = iter(["echo    hi     there", "exit"])
         monkeypatch.setattr("builtins.input", lambda: next(inputs))
         calls = []
-        monkeypatch.setattr(main, "handle_command", lambda cmd, args: calls.append((cmd, args)))
+        monkeypatch.setattr(
+            main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
+        )
 
         main.main()
 
         assert calls == [("echo", ["hi", "there"])]
 
-    def test_empty_line_raises_indexerror(self, monkeypatch):
-        # Known edge case/bug: an empty input line makes `line.split()` return
-        # [], and `parts[0]` then raises IndexError instead of being handled.
-        monkeypatch.setattr("builtins.input", lambda: "")
+    def test_empty_line_produces_empty_command_without_crashing(self, monkeypatch):
+        # Previously an empty line crashed with IndexError (line.split()[0] on
+        # an empty list). The lexer/parser refactor fixed this: tokenize("")
+        # returns no tokens, and parse() only reads tokens[0] inside the loop
+        # guard, so an empty line now parses to an empty, harmless command.
+        inputs = iter(["", "exit"])
+        monkeypatch.setattr("builtins.input", lambda: next(inputs))
+        calls = []
+        monkeypatch.setattr(
+            main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
+        )
 
-        with pytest.raises(IndexError):
-            main.main()
+        main.main()
+
+        assert calls == [("", [])]

@@ -206,6 +206,19 @@ class TestRunProgram:
 
         assert "ran with arg: file.txt\n" in out
 
+    def test_runs_executable_named_with_spaces_via_backslash_escapes(self, tmp_path):
+        bin_dir = tmp_path / "fox"
+        bin_dir.mkdir()
+        make_executable(
+            bin_dir / "backslash program",
+            "#!/bin/sh\necho \"ran with arg: $1\"\n",
+        )
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+        out, _ = run_shell([r"backslash\ program argument1", "exit"], env=env)
+
+        assert "ran with arg: argument1\n" in out
+
 
 # ---------------------------------------------------------------------------
 # #MG5 - Locate executable files
@@ -316,6 +329,63 @@ class TestSingleQuoteParsing:
         out, _ = run_shell(["echo hello 'shell world' again", "exit"])
 
         assert "hello shell world again\n" in out
+
+
+# ---------------------------------------------------------------------------
+# Double-quote parsing
+# ---------------------------------------------------------------------------
+
+class TestDoubleQuoteParsing:
+    def test_echo_preserves_spaces_inside_double_quotes(self):
+        out, _ = run_shell(['echo "shell hello"', "exit"])
+
+        assert "shell hello\n" in out
+
+    def test_echo_preserves_repeated_internal_whitespace(self):
+        out, _ = run_shell(['echo "world     test"', "exit"])
+
+        assert "world     test\n" in out
+
+    def test_cat_reads_multiple_quoted_paths_with_spaces(self, tmp_path):
+        file1 = tmp_path / "file name"
+        file2 = tmp_path / "file name with spaces"
+        file1.write_text("content1 ")
+        file2.write_text("content2")
+
+        out, _ = run_shell([f'cat "{file1}" "{file2}"', "exit"], cwd=tmp_path)
+
+        assert "content1 content2" in out
+
+    def test_mixes_quoted_and_unquoted_arguments(self):
+        out, _ = run_shell(['echo hello "shell world" again', "exit"])
+
+        assert "hello shell world again\n" in out
+
+    def test_escaped_double_quote_is_literal(self):
+        out, _ = run_shell(['echo "say \\"hi\\""', "exit"])
+
+        assert 'say "hi"\n' in out
+
+
+# ---------------------------------------------------------------------------
+# Backslash parsing (outside quotes)
+# ---------------------------------------------------------------------------
+
+class TestBackslashParsing:
+    def test_escapes_a_following_space_into_a_literal_space(self):
+        out, _ = run_shell([r"echo multiple\ \ \ \ spaces", "exit"])
+
+        assert "multiple    spaces\n" in out
+
+    def test_before_ordinary_character_drops_the_backslash(self):
+        out, _ = run_shell([r"echo ignore\_backslash", "exit"])
+
+        assert "ignore_backslash\n" in out
+
+    def test_escaped_backslash_produces_a_single_literal_backslash(self):
+        out, _ = run_shell([r"echo just_one_\\_slash", "exit"])
+
+        assert "just_one_\\_slash\n" in out
 
 
 # ---------------------------------------------------------------------------

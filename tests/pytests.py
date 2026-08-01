@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app import executor, main, path_utils, shell_builtins
-from app.parser import parse_command
+from app.parser import Parser, ParseState, finish_token
 
 
 def make_executable(path: Path) -> None:
@@ -310,116 +310,340 @@ class TestHandleCommand:
 
 
 # ---------------------------------------------------------------------------
-# parse_command
+# finish_token
+# ---------------------------------------------------------------------------
+
+class TestFinishToken:
+    def test_appends_joined_current_to_tokens(self):
+        tokens = []
+        current = ["h", "i"]
+
+        finish_token(tokens, current)
+
+        assert tokens == ["hi"]
+
+    def test_clears_current_after_appending(self):
+        tokens = []
+        current = ["h", "i"]
+
+        finish_token(tokens, current)
+
+        assert current == []
+
+    def test_does_nothing_when_current_is_empty(self):
+        tokens = ["existing"]
+        current = []
+
+        finish_token(tokens, current)
+
+        assert tokens == ["existing"]
+
+    def test_preserves_existing_tokens_when_appending(self):
+        tokens = ["echo"]
+        current = ["h", "i"]
+
+        finish_token(tokens, current)
+
+        assert tokens == ["echo", "hi"]
+
+
+# ---------------------------------------------------------------------------
+# Parser.turn_escape_off
+# ---------------------------------------------------------------------------
+
+class TestTurnEscapeOff:
+    def test_sets_escaping_to_false(self):
+        parser = Parser()
+        parser._escaping = True
+
+        parser.turn_escape_off()
+
+        assert parser._escaping is False
+
+    def test_is_a_no_op_when_already_off(self):
+        parser = Parser()
+
+        parser.turn_escape_off()
+
+        assert parser._escaping is False
+
+
+# ---------------------------------------------------------------------------
+# Parser.handle_normal_parse
+# ---------------------------------------------------------------------------
+
+class TestHandleNormalParse:
+    def test_appends_ordinary_character_to_current(self):
+        parser = Parser()
+
+        parser.handle_normal_parse("a")
+
+        assert parser._current == ["a"]
+
+    def test_whitespace_finishes_current_token(self):
+        parser = Parser()
+        parser._current = ["h", "i"]
+
+        parser.handle_normal_parse(" ")
+
+        assert parser._tokens == ["hi"]
+        assert parser._current == []
+
+    def test_whitespace_with_empty_current_does_not_add_empty_token(self):
+        parser = Parser()
+
+        parser.handle_normal_parse(" ")
+
+        assert parser._tokens == []
+
+    def test_single_quote_switches_state_to_single(self):
+        parser = Parser()
+
+        parser.handle_normal_parse("'")
+
+        assert parser._state == ParseState.SINGLE
+        assert parser._current == []
+
+    def test_double_quote_switches_state_to_double(self):
+        parser = Parser()
+
+        parser.handle_normal_parse('"')
+
+        assert parser._state == ParseState.DOUBLE
+        assert parser._current == []
+
+    def test_backslash_turns_on_escaping_without_appending(self):
+        parser = Parser()
+
+        parser.handle_normal_parse("\\")
+
+        assert parser._escaping is True
+        assert parser._current == []
+
+    def test_escaping_appends_char_literally_and_turns_escaping_off(self):
+        parser = Parser()
+        parser._escaping = True
+
+        parser.handle_normal_parse(" ")
+
+        assert parser._current == [" "]
+        assert parser._escaping is False
+
+    def test_escaping_treats_quote_characters_as_literal(self):
+        parser = Parser()
+        parser._escaping = True
+
+        parser.handle_normal_parse("'")
+
+        assert parser._current == ["'"]
+        assert parser._state == ParseState.NORMAL
+
+
+# ---------------------------------------------------------------------------
+# Parser.handle_single_parse
+# ---------------------------------------------------------------------------
+
+class TestHandleSingleParse:
+    def test_appends_ordinary_character_to_current(self):
+        parser = Parser()
+
+        parser.handle_single_parse("a")
+
+        assert parser._current == ["a"]
+
+    def test_single_quote_switches_state_back_to_normal(self):
+        parser = Parser()
+        parser._state = ParseState.SINGLE
+
+        parser.handle_single_parse("'")
+
+        assert parser._state == ParseState.NORMAL
+        assert parser._current == []
+
+    def test_backslash_is_appended_literally(self):
+        parser = Parser()
+
+        parser.handle_single_parse("\\")
+
+        assert parser._current == ["\\"]
+
+    def test_double_quote_is_appended_literally(self):
+        parser = Parser()
+
+        parser.handle_single_parse('"')
+
+        assert parser._current == ['"']
+
+
+# ---------------------------------------------------------------------------
+# Parser.handle_double_parse
+# ---------------------------------------------------------------------------
+
+class TestHandleDoubleParse:
+    def test_appends_ordinary_character_to_current(self):
+        parser = Parser()
+
+        parser.handle_double_parse("a")
+
+        assert parser._current == ["a"]
+
+    def test_double_quote_switches_state_back_to_normal(self):
+        parser = Parser()
+        parser._state = ParseState.DOUBLE
+
+        parser.handle_double_parse('"')
+
+        assert parser._state == ParseState.NORMAL
+        assert parser._current == []
+
+    def test_backslash_turns_on_escaping_without_appending(self):
+        parser = Parser()
+
+        parser.handle_double_parse("\\")
+
+        assert parser._escaping is True
+        assert parser._current == []
+
+    def test_single_quote_has_no_special_meaning(self):
+        parser = Parser()
+        parser._state = ParseState.DOUBLE
+
+        parser.handle_double_parse("'")
+
+        assert parser._current == ["'"]
+        assert parser._state == ParseState.DOUBLE
+
+    @pytest.mark.parametrize("special_char", sorted(Parser.DOUBLE_ESCAPES))
+    def test_escaping_a_special_character_drops_the_backslash(self, special_char):
+        parser = Parser()
+        parser._escaping = True
+
+        parser.handle_double_parse(special_char)
+
+        assert parser._current == [special_char]
+        assert parser._escaping is False
+
+    def test_escaping_an_ordinary_character_keeps_the_backslash(self):
+        parser = Parser()
+        parser._escaping = True
+
+        parser.handle_double_parse("a")
+
+        assert parser._current == ["\\", "a"]
+        assert parser._escaping is False
+
+
+# ---------------------------------------------------------------------------
+# Parser.parse
 # ---------------------------------------------------------------------------
 
 class TestParseCommand:
     def test_splits_on_single_space(self):
-        assert parse_command("echo hello") == ["echo", "hello"]
+        assert Parser().parse("echo hello") == ["echo", "hello"]
 
     def test_collapses_repeated_whitespace(self):
-        assert parse_command("echo    hi     there") == ["echo", "hi", "there"]
+        assert Parser().parse("echo    hi     there") == ["echo", "hi", "there"]
 
     def test_ignores_leading_and_trailing_whitespace(self):
-        assert parse_command("  echo hi  ") == ["echo", "hi"]
+        assert Parser().parse("  echo hi  ") == ["echo", "hi"]
 
     def test_empty_line_returns_empty_list(self):
-        assert parse_command("") == []
+        assert Parser().parse("") == []
 
     def test_whitespace_only_line_returns_empty_list(self):
-        assert parse_command("   ") == []
+        assert Parser().parse("   ") == []
 
     def test_single_quotes_preserve_spaces_between_words(self):
-        assert parse_command("echo 'shell hello'") == ["echo", "shell hello"]
+        assert Parser().parse("echo 'shell hello'") == ["echo", "shell hello"]
 
     def test_single_quotes_preserve_repeated_internal_whitespace(self):
-        assert parse_command("echo 'world     test'") == ["echo", "world     test"]
+        assert Parser().parse("echo 'world     test'") == ["echo", "world     test"]
 
     def test_multiple_single_quoted_arguments(self):
-        result = parse_command("cat '/tmp/file name' '/tmp/file name with spaces'")
+        result = Parser().parse("cat '/tmp/file name' '/tmp/file name with spaces'")
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
 
     def test_single_quotes_can_produce_empty_argument(self):
-        assert parse_command("echo ''") == ["echo"]
+        assert Parser().parse("echo ''") == ["echo"]
 
     def test_single_quoted_argument_alone(self):
-        assert parse_command("'hello world'") == ["hello world"]
+        assert Parser().parse("'hello world'") == ["hello world"]
 
     def test_mixes_quoted_and_unquoted_arguments(self):
-        result = parse_command("echo hello 'shell world' again")
+        result = Parser().parse("echo hello 'shell world' again")
 
         assert result == ["echo", "hello", "shell world", "again"]
 
     def test_double_quotes_preserve_spaces_between_words(self):
-        assert parse_command('echo "shell hello"') == ["echo", "shell hello"]
+        assert Parser().parse('echo "shell hello"') == ["echo", "shell hello"]
 
     def test_double_quotes_preserve_repeated_internal_whitespace(self):
-        assert parse_command('echo "world     test"') == ["echo", "world     test"]
+        assert Parser().parse('echo "world     test"') == ["echo", "world     test"]
 
     def test_multiple_double_quoted_arguments(self):
-        result = parse_command('cat "/tmp/file name" "/tmp/file name with spaces"')
+        result = Parser().parse('cat "/tmp/file name" "/tmp/file name with spaces"')
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
 
     def test_double_quotes_can_produce_empty_argument(self):
-        assert parse_command('echo ""') == ["echo"]
+        assert Parser().parse('echo ""') == ["echo"]
 
     def test_double_quoted_argument_alone(self):
-        assert parse_command('"hello world"') == ["hello world"]
+        assert Parser().parse('"hello world"') == ["hello world"]
 
     def test_mixes_double_quoted_and_unquoted_arguments(self):
-        result = parse_command('echo hello "shell world" again')
+        result = Parser().parse('echo hello "shell world" again')
 
         assert result == ["echo", "hello", "shell world", "again"]
 
     def test_double_quotes_preserve_single_quote_inside(self):
-        result = parse_command("""echo "bar"  "shell's"  "foo" """)
+        result = Parser().parse("""echo "bar"  "shell's"  "foo" """)
 
         assert result == ["echo", "bar", "shell's", "foo"]
 
     def test_double_quotes_escaped_double_quote_is_literal(self):
-        result = parse_command('echo "say \\"hi\\""')
+        result = Parser().parse('echo "say \\"hi\\""')
 
         assert result == ["echo", 'say "hi"']
 
     def test_double_quotes_escaped_backslash_is_single_literal_backslash(self):
-        result = parse_command('echo "a\\\\b"')
+        result = Parser().parse('echo "a\\\\b"')
 
         assert result == ["echo", "a\\b"]
 
     def test_double_quotes_escaped_dollar_sign_is_literal(self):
-        result = parse_command('echo "\\$HOME"')
+        result = Parser().parse('echo "\\$HOME"')
 
         assert result == ["echo", "$HOME"]
 
     def test_double_quotes_escaped_backtick_is_literal(self):
-        result = parse_command('echo "\\`cmd\\`"')
+        result = Parser().parse('echo "\\`cmd\\`"')
 
         assert result == ["echo", "`cmd`"]
 
     def test_double_quotes_escaped_newline_is_literal(self):
-        result = parse_command('echo "a\\\nb"')
+        result = Parser().parse('echo "a\\\nb"')
 
         assert result == ["echo", "a\nb"]
 
     def test_double_quotes_escapes_multiple_special_characters_in_sequence(self):
         line = 'echo "' + '\\$' + '\\`' + '\\"' + '\\\\' + '"'
-        result = parse_command(line)
+        result = Parser().parse(line)
 
         assert result == ["echo", '$`"\\']
 
     def test_double_quotes_escaped_ordinary_character_keeps_backslash(self):
         # 'a' is not a special character, so the backslash is preserved
         # literally alongside it rather than being consumed as an escape.
-        result = parse_command('echo "\\a"')
+        result = Parser().parse('echo "\\a"')
 
         assert result == ["echo", "\\a"]
 
     def test_double_quotes_escaped_single_quote_keeps_backslash_since_not_special(self):
         # A single quote has no meaning inside double quotes, so it isn't in
         # the special-character set and the backslash before it is literal.
-        result = parse_command('echo "\\\'"')
+        result = Parser().parse('echo "\\\'"')
 
         assert result == ["echo", "\\'"]
 
@@ -428,30 +652,30 @@ class TestParseCommand:
         # escaping is set but the string ends before a char arrives to apply
         # it to, so the backslash silently disappears.
         line = 'echo "abc' + '\\'
-        result = parse_command(line)
+        result = Parser().parse(line)
 
         assert result == ["echo", "abc"]
 
     def test_single_quotes_preserve_backslashes_literally(self):
-        result = parse_command(r"echo 'multiple\\slashes'")
+        result = Parser().parse(r"echo 'multiple\\slashes'")
 
         assert result == ["echo", "multiple\\\\slashes"]
 
     def test_backslash_escapes_a_following_space_into_a_literal_space(self):
-        result = parse_command(r"echo multiple\ \ \ \ spaces")
+        result = Parser().parse(r"echo multiple\ \ \ \ spaces")
 
         assert result == ["echo", "multiple    spaces"]
 
     def test_backslash_escapes_quote_characters_outside_quotes(self):
-        result = parse_command("echo \\'\\\"literal quotes\\\"\\'")
+        result = Parser().parse("echo \\'\\\"literal quotes\\\"\\'")
 
         assert result == ["echo", "'\"literal", "quotes\"'"]
 
     def test_backslash_before_ordinary_character_just_drops_the_backslash(self):
-        assert parse_command(r"echo ignore\_backslash") == ["echo", "ignore_backslash"]
+        assert Parser().parse(r"echo ignore\_backslash") == ["echo", "ignore_backslash"]
 
     def test_backslash_escaped_backslash_produces_a_single_literal_backslash(self):
-        result = parse_command(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3")
+        result = Parser().parse(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3")
 
         assert result == [
             "cat",
@@ -464,7 +688,7 @@ class TestParseCommand:
         # Known edge case: a backslash as the final character sets BACKSLASH
         # state but the loop ends before another char arrives, so it's never
         # appended anywhere and silently disappears.
-        assert parse_command("echo test\\") == ["echo", "test"]
+        assert Parser().parse("echo test\\") == ["echo", "test"]
 
 
 # ---------------------------------------------------------------------------

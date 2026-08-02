@@ -1,20 +1,20 @@
 from app.lexer import TokenType
 from app.errors import BuiltinError
 
+REDIRECT_FD_MODES = {
+    TokenType.OVERWRITE: (1, "w"),
+    TokenType.REDIRECT_STDERR: (2, "w")
+}
 
-#TODO: check between access denied and target just being a directory
-def apply_redirections(instruction: Instruction) -> None:
+def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, str]]:
     """
-    Applies the output redirections specified by an instruction before command execution.
-    Raises a BuiltinError if a redirection target cannot be opened or written to.
+    Resolves command redirections into a mapping of file descriptors to targets and modes.
     """
+
+    targets = {}
 
     for redirect in instruction.redirects:
+        fd, mode = REDIRECT_FD_MODES[redirect.type]
+        targets[fd] = (redirect.target, mode)
 
-        if redirect.type == TokenType.OVERWRITE:
-            try:
-                with open(redirect.target, "w") as file:
-                    file.write(" ".join(instruction.args))
-
-            except OSError as e:
-                raise BuiltinError(instruction.cmd, f"{redirect.target}: {e.strerror}") from e
+    return targets

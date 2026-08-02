@@ -350,6 +350,33 @@ class TestResolveRedirectTargets:
 
         assert resolve_redirect_targets(instruction) == {1: (str(target), "a")}
 
+    def test_maps_append_stderr_to_fd_2_in_append_mode(self, tmp_path):
+        target = tmp_path / "err.md"
+        instruction = make_instruction("cat", [], [Redirect(TokenType.APPEND_STDERR, str(target))])
+
+        assert resolve_redirect_targets(instruction) == {2: (str(target), "a")}
+
+    def test_append_stdout_and_append_stderr_resolve_to_independent_targets(self, tmp_path):
+        out = tmp_path / "out.md"
+        err = tmp_path / "err.md"
+        instruction = make_instruction(
+            "cat",
+            [],
+            [Redirect(TokenType.APPEND_STDOUT, str(out)), Redirect(TokenType.APPEND_STDERR, str(err))],
+        )
+
+        assert resolve_redirect_targets(instruction) == {1: (str(out), "a"), 2: (str(err), "a")}
+
+    def test_append_stderr_after_overwrite_for_the_same_fd_overrides_it(self, tmp_path):
+        target = tmp_path / "err.md"
+        instruction = make_instruction(
+            "cat",
+            [],
+            [Redirect(TokenType.REDIRECT_STDERR, str(target)), Redirect(TokenType.APPEND_STDERR, str(target))],
+        )
+
+        assert resolve_redirect_targets(instruction) == {2: (str(target), "a")}
+
 
 # ---------------------------------------------------------------------------
 # open_redirects
@@ -479,6 +506,24 @@ class TestOpenRedirects:
             files[1].write("new\n")
 
         assert target.read_text() == "existing\nnew\n"
+
+    def test_append_stderr_mode_creates_file_when_it_does_not_exist(self, tmp_path):
+        target = tmp_path / "err.md"
+        instruction = make_instruction("cat", [], [Redirect(TokenType.APPEND_STDERR, str(target))])
+
+        with open_redirects(instruction) as files:
+            assert target.exists()
+            assert set(files) == {2}
+
+    def test_append_stderr_mode_preserves_existing_content_and_writes_after_it(self, tmp_path):
+        target = tmp_path / "err.md"
+        target.write_text("existing error\n")
+        instruction = make_instruction("cat", [], [Redirect(TokenType.APPEND_STDERR, str(target))])
+
+        with open_redirects(instruction) as files:
+            files[2].write("new error\n")
+
+        assert target.read_text() == "existing error\nnew error\n"
 
 
 # ---------------------------------------------------------------------------

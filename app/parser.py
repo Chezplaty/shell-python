@@ -47,7 +47,8 @@ def parse(tokens: list[Token]) -> Instruction:
         elif token.type in {
             TokenType.REDIRECT_STDOUT,
             TokenType.REDIRECT_STDERR,
-            TokenType.APPEND_STDOUT
+            TokenType.APPEND_STDOUT,
+            TokenType.APPEND_STDERR
         }:
             redirect, i = parse_overwrite(tokens, i)
             redirects.append(redirect)

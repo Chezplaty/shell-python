@@ -15,12 +15,14 @@ class TokenType(Enum):
     REDIRECT_STDOUT = auto()
     REDIRECT_STDERR = auto()
     APPEND_STDOUT = auto()
+    APPEND_STDERR = auto()
 
 TOKEN_TYPES = {'>': TokenType.REDIRECT_STDOUT,
              '1>': TokenType.REDIRECT_STDOUT,
              '2>': TokenType.REDIRECT_STDERR,
              '>>': TokenType.APPEND_STDOUT,
-             '1>>': TokenType.APPEND_STDOUT}
+             '1>>': TokenType.APPEND_STDOUT,
+             '2>>': TokenType.APPEND_STDERR}
 
 def finish_token(tokens: list[str], current: list[str]) -> None:
     """

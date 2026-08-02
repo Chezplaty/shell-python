@@ -551,6 +551,59 @@ class TestAppendStdoutRedirection:
 # Output redirection: the 2> operator
 # ---------------------------------------------------------------------------
 
+class TestAppendStderrRedirection:
+    def test_gtgt_only_redirects_stdout_so_stderr_still_prints_to_terminal(self, tmp_path):
+        target = tmp_path / "baz.md"
+
+        out, _ = run_shell([f"ls nonexistent >> {target}", "exit"], cwd=tmp_path)
+
+        assert "ls: nonexistent: No such file or directory" in out
+        assert not target.exists() or target.read_text() == ""
+
+    def test_2gtgt_redirects_stderr_to_file_instead_of_terminal(self, tmp_path):
+        target = tmp_path / "qux.md"
+
+        out, _ = run_shell([f"ls nonexistent 2>> {target}", "exit"], cwd=tmp_path)
+
+        assert "No such file or directory" not in out
+        assert "ls: nonexistent: No such file or directory" in target.read_text()
+
+    def test_2gtgt_leaves_stdout_untouched(self, tmp_path):
+        target = tmp_path / "quz.md"
+
+        out, _ = run_shell([f"echo James says Error 2>> {target}", "exit"], cwd=tmp_path)
+
+        assert "James says Error\n" in out
+
+    def test_2gtgt_appends_across_multiple_invocations_instead_of_overwriting(self, tmp_path):
+        target = tmp_path / "quz.md"
+
+        out, _ = run_shell(
+            [f"cat nonexistent 2>> {target}", f"ls nonexistent 2>> {target}", "exit"], cwd=tmp_path
+        )
+
+        assert "No such file or directory" not in out
+        assert target.read_text() == (
+            "cat: nonexistent: No such file or directory\n"
+            "ls: nonexistent: No such file or directory\n"
+        )
+
+    def test_2gtgt_does_not_truncate_existing_file_content(self, tmp_path):
+        target = tmp_path / "existing.md"
+        target.write_text("original content\n")
+
+        run_shell([f"cat nonexistent 2>> {target}", "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "original content\ncat: nonexistent: No such file or directory\n"
+
+    def test_2gtgt_redirect_failure_prints_error_to_terminal_and_writes_no_file(self, tmp_path):
+        missing_dir_target = tmp_path / "does_not_exist" / "err.md"
+
+        out, _ = run_shell([f"cat nonexistent 2>> {missing_dir_target}", "exit"], cwd=tmp_path)
+
+        assert f"cat: {missing_dir_target}: No such file or directory\n" in out
+        assert not missing_dir_target.parent.exists()
+
 class TestStderrRedirection:
     def test_2gt_redirects_an_external_commands_stderr_to_file(self, tmp_path):
         existing = tmp_path / "existing_file"

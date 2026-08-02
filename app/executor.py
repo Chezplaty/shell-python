@@ -31,4 +31,4 @@ def handle_command(instruction: Instruction) -> None:
             with redirected_fds(files):
                 handler(instruction)
         else:
-            handle_external_programs(instruction.cmd, instruction.args)
+            handle_external_programs(instruction.cmd, instruction.args, files)

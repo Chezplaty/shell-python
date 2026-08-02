@@ -3,7 +3,6 @@ from pathlib import Path
 
 from app.path_utils import get_executable
 from app.errors import BuiltinError
-from app.redirects import apply_redirections
 
 def handle_cd(instruction: Instruction) -> None:
     """
@@ -60,12 +59,7 @@ def handle_echo(instruction: Instruction) -> None:
     Preserves the order of the arguments and appends a newline to the output.
     """
 
-    # check if output needs to be redirected
-    if instruction.redirects:
-        apply_redirections(instruction)
-
-    else:
-        print(" ".join(instruction.args))
+    print(" ".join(instruction.args))
 
 BUILTINS = {"exit": None,
             "echo": handle_echo,

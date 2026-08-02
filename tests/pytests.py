@@ -297,7 +297,7 @@ class TestHandlePwd:
 class TestResolveRedirectTargets:
     def test_maps_overwrite_to_fd_1_in_write_mode(self, tmp_path):
         target = tmp_path / "out.md"
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         assert resolve_redirect_targets(instruction) == {1: (str(target), "w")}
 
@@ -313,7 +313,7 @@ class TestResolveRedirectTargets:
         instruction = make_instruction(
             "cat",
             [],
-            [Redirect(TokenType.OVERWRITE, str(out)), Redirect(TokenType.REDIRECT_STDERR, str(err))],
+            [Redirect(TokenType.REDIRECT_STDOUT, str(out)), Redirect(TokenType.REDIRECT_STDERR, str(err))],
         )
 
         assert resolve_redirect_targets(instruction) == {1: (str(out), "w"), 2: (str(err), "w")}
@@ -324,7 +324,7 @@ class TestResolveRedirectTargets:
         instruction = make_instruction(
             "echo",
             ["hi"],
-            [Redirect(TokenType.OVERWRITE, str(first)), Redirect(TokenType.OVERWRITE, str(second))],
+            [Redirect(TokenType.REDIRECT_STDOUT, str(first)), Redirect(TokenType.REDIRECT_STDOUT, str(second))],
         )
 
         assert resolve_redirect_targets(instruction) == {1: (str(second), "w")}
@@ -342,7 +342,7 @@ class TestResolveRedirectTargets:
 class TestOpenRedirects:
     def test_creates_file_when_it_does_not_exist(self, tmp_path):
         target = tmp_path / "out.md"
-        instruction = make_instruction("echo", ["hello", "world"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hello", "world"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         with open_redirects(instruction) as files:
             assert target.exists()
@@ -351,7 +351,7 @@ class TestOpenRedirects:
     def test_overwrite_mode_lets_the_caller_truncate_existing_content(self, tmp_path):
         target = tmp_path / "out.md"
         target.write_text("old content that is much longer than the new content")
-        instruction = make_instruction("echo", ["new"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["new"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         with open_redirects(instruction) as files:
             files[1].write("new")
@@ -364,7 +364,7 @@ class TestOpenRedirects:
         instruction = make_instruction(
             "cat",
             [],
-            [Redirect(TokenType.OVERWRITE, str(out)), Redirect(TokenType.REDIRECT_STDERR, str(err))],
+            [Redirect(TokenType.REDIRECT_STDOUT, str(out)), Redirect(TokenType.REDIRECT_STDERR, str(err))],
         )
 
         with open_redirects(instruction) as files:
@@ -376,7 +376,7 @@ class TestOpenRedirects:
 
     def test_closes_opened_files_once_the_block_exits(self, tmp_path):
         target = tmp_path / "out.md"
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         with open_redirects(instruction) as files:
             opened_file = files[1]
@@ -391,7 +391,7 @@ class TestOpenRedirects:
 
     def test_raises_builtin_error_when_parent_directory_is_missing(self, tmp_path):
         target = tmp_path / "missing_dir" / "out.md"
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         with pytest.raises(BuiltinError) as exc_info:
             with open_redirects(instruction):
@@ -402,7 +402,7 @@ class TestOpenRedirects:
     def test_raises_builtin_error_when_target_is_a_directory(self, tmp_path):
         target = tmp_path / "a_directory"
         target.mkdir()
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         with pytest.raises(BuiltinError) as exc_info:
             with open_redirects(instruction):
@@ -416,7 +416,7 @@ class TestOpenRedirects:
         locked_dir.mkdir()
         locked_dir.chmod(0o500)
         target = locked_dir / "out.md"
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         try:
             with pytest.raises(BuiltinError) as exc_info:
@@ -428,7 +428,7 @@ class TestOpenRedirects:
 
     def test_error_message_uses_the_instructions_own_cmd(self, tmp_path):
         target = tmp_path / "missing_dir" / "out.md"
-        instruction = make_instruction("cat", [], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("cat", [], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         with pytest.raises(BuiltinError) as exc_info:
             with open_redirects(instruction):
@@ -438,7 +438,7 @@ class TestOpenRedirects:
 
     def test_does_not_create_parent_directories_when_redirect_fails(self, tmp_path):
         target = tmp_path / "missing_dir" / "out.md"
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
 
         with pytest.raises(BuiltinError):
             with open_redirects(instruction):
@@ -540,7 +540,7 @@ class TestHandleCommand:
 
         with capfd.disabled():
             executor.handle_command(
-                make_instruction("echo", ["hello", "world"], [Redirect(TokenType.OVERWRITE, str(target))])
+                make_instruction("echo", ["hello", "world"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
             )
 
         assert target.read_text() == "hello world\n"

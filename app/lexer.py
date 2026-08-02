@@ -12,8 +12,10 @@ class Token:
 
 class TokenType(Enum):
     WORD = auto()
-    OVERWRITE = auto()
+    REDIRECT_STDOUT = auto()
     REDIRECT_STDERR = auto()
+    APPEND_STDOUT = auto()
+    
 
 def finish_token(tokens: list[str], current: list[str]) -> None:
     """
@@ -29,7 +31,7 @@ def finish_token(tokens: list[str], current: list[str]) -> None:
 
         #TODO: map the symbols to the token type in a dictionary
         if word == '>' or word == '1>':
-            token_type = TokenType.OVERWRITE
+            token_type = TokenType.REDIRECT_STDOUT
 
         elif word == '2>':
             token_type = TokenType.REDIRECT_STDERR

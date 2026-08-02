@@ -9,7 +9,7 @@ from app.parser import Instruction
 
 
 REDIRECT_FD_MODES = {
-    TokenType.OVERWRITE: (1, "w"),
+    TokenType.REDIRECT_STDOUT: (1, "w"),
     TokenType.REDIRECT_STDERR: (2, "w")
 }
 

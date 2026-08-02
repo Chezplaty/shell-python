@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.path_utils import get_executable
 from app.errors import BuiltinError
+from app.parser import Instruction
 
 def handle_cd(instruction: Instruction) -> None:
     """

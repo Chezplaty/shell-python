@@ -1,9 +1,11 @@
 import os
 import sys
 from contextlib import contextmanager
+from typing import IO, Generator
 
 from app.lexer import TokenType
 from app.errors import BuiltinError
+from app.parser import Instruction
 
 
 REDIRECT_FD_MODES = {
@@ -26,7 +28,7 @@ def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, s
     return targets
 
 @contextmanager
-def open_redirects(instruction: Instruction) -> dict[int, 'file']:
+def open_redirects(instruction: Instruction) -> Generator[dict[int, IO]]:
     """
     Opens the files a command's redirects point to, so its output/errors can be written there.
     Closes every file it opened once the command is done, even if something goes wrong.
@@ -51,7 +53,7 @@ def open_redirects(instruction: Instruction) -> dict[int, 'file']:
             file.close()
 
 @contextmanager
-def redirected_fds(files: dict[int, 'file']):
+def redirected_fds(files: dict[int, IO]) -> Generator[None]:
     """
     Makes a builtin command's printed output actually land in its redirected file, not the screen.
     Only lasts for the duration of the command; everything goes back to normal right after.

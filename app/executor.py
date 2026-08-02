@@ -1,10 +1,12 @@
 import subprocess
+from typing import IO
 
 from app.path_utils import get_executable
 from app.shell_builtins import BUILTINS
 from app.redirects import open_redirects, redirected_fds
+from app.parser import Instruction
 
-def handle_external_programs(cmd: str, args: list[str], files: dict[int, 'file']) -> None:
+def handle_external_programs(cmd: str, args: list[str], files: dict[int, IO]) -> None:
     """
     Runs an external command as its own program, found by searching PATH.
     Its output, errors, and input go wherever the command's own redirects say they should.

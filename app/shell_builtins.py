@@ -56,7 +56,6 @@ def handle_type(instruction: Instruction) -> None:
 def handle_echo(instruction: Instruction) -> None:
     """
     Prints the provided arguments separated by spaces.
-    Preserves the order of the arguments and appends a newline to the output.
     """
 
     print(" ".join(instruction.args))

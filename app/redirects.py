@@ -13,7 +13,8 @@ REDIRECT_FD_MODES = {
 
 def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, str]]:
     """
-    Resolves command redirections into a mapping of file descriptors to targets and modes.
+    Figures out which file a command's output, errors, and input should each go to or come from.
+    If a command redirects the same stream more than once, only the last one takes effect.
     """
 
     targets = {}
@@ -26,6 +27,11 @@ def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, s
 
 @contextmanager
 def open_redirects(instruction: Instruction) -> dict[int, 'file']:
+    """
+    Opens the files a command's redirects point to, so its output/errors can be written there.
+    Closes every file it opened once the command is done, even if something goes wrong.
+    """
+
     targets = resolve_redirect_targets(instruction)
     files = {}
 
@@ -46,6 +52,10 @@ def open_redirects(instruction: Instruction) -> dict[int, 'file']:
 
 @contextmanager
 def redirected_fds(files: dict[int, 'file']):
+    """
+    Makes a builtin command's printed output actually land in its redirected file, not the screen.
+    Only lasts for the duration of the command; everything goes back to normal right after.
+    """
 
     if not files:
         yield

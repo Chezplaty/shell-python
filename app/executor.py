@@ -6,8 +6,8 @@ from app.redirects import open_redirects, redirected_fds
 
 def handle_external_programs(cmd: str, args: list[str], files: dict[int, 'file']) -> None:
     """
-    Executes an external command by locating its executable path through PATH.
-    Runs the command with the provided arguments or prints an error if the command cannot be found.
+    Runs an external command as its own program, found by searching PATH.
+    Its output, errors, and input go wherever the command's own redirects say they should.
     """
 
     #TODO: implement error handling if subprocess does not work
@@ -20,8 +20,8 @@ def handle_external_programs(cmd: str, args: list[str], files: dict[int, 'file']
 
 def handle_command(instruction: Instruction) -> None:
     """
-    Executes the appropriate handler for a parsed shell command and its argument.
-    Prints an error message when the command is not supported by the shell.
+    Runs a single parsed command.
+    Any redirects on the command are set up first so output goes to the right place.
     """
 
     with open_redirects(instruction) as files:

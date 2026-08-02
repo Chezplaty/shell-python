@@ -6,8 +6,9 @@ import pytest
 
 from app import executor, main, path_utils, shell_builtins
 from app.errors import BuiltinError
-from app.lexer import Lexer, LexState, finish_token
-from app.parser import Instruction
+from app.lexer import Lexer, LexState, TokenType, finish_token
+from app.parser import Instruction, Redirect
+from app.redirects import apply_redirections
 
 
 def make_executable(path: Path) -> None:
@@ -276,6 +277,134 @@ class TestHandlePwd:
 
         captured = capsys.readouterr()
         assert str(tmp_path) not in captured.out
+
+
+# ---------------------------------------------------------------------------
+# apply_redirections
+# ---------------------------------------------------------------------------
+
+class TestApplyRedirections:
+    def test_creates_file_when_it_does_not_exist(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["hello", "world"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        apply_redirections(instruction)
+
+        assert target.read_text() == "hello world"
+
+    def test_overwrites_existing_file_content_instead_of_appending(self, tmp_path):
+        target = tmp_path / "out.md"
+        target.write_text("old content that is much longer than the new content")
+        instruction = make_instruction("echo", ["new"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        apply_redirections(instruction)
+
+        assert target.read_text() == "new"
+
+    def test_writes_empty_string_when_no_args(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", [], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        apply_redirections(instruction)
+
+        assert target.read_text() == ""
+
+    def test_joins_multiple_args_with_a_single_space(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["a", "b", "c"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        apply_redirections(instruction)
+
+        assert target.read_text() == "a b c"
+
+    def test_does_not_append_a_trailing_newline(self, tmp_path):
+        # Known gap vs. real shells: `echo` normally appends a newline, but
+        # apply_redirections writes the raw joined args with nothing after them.
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["Hello"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        apply_redirections(instruction)
+
+        assert target.read_bytes() == b"Hello"
+
+    def test_ignores_redirects_that_are_not_overwrite_type(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.WORD, str(target))])
+
+        apply_redirections(instruction)
+
+        assert not target.exists()
+
+    def test_applies_each_redirect_to_its_own_target(self, tmp_path):
+        first = tmp_path / "first.md"
+        second = tmp_path / "second.md"
+        instruction = make_instruction(
+            "echo",
+            ["hi"],
+            [Redirect(TokenType.OVERWRITE, str(first)), Redirect(TokenType.OVERWRITE, str(second))],
+        )
+
+        apply_redirections(instruction)
+
+        assert first.read_text() == "hi"
+        assert second.read_text() == "hi"
+
+    def test_does_nothing_when_there_are_no_redirects(self, tmp_path):
+        instruction = make_instruction("echo", ["hi"], [])
+
+        apply_redirections(instruction)  # should not raise
+
+    def test_raises_builtin_error_when_parent_directory_is_missing(self, tmp_path):
+        target = tmp_path / "missing_dir" / "out.md"
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        with pytest.raises(BuiltinError) as exc_info:
+            apply_redirections(instruction)
+
+        assert str(exc_info.value) == f"echo: {target}: No such file or directory"
+
+    def test_raises_builtin_error_when_target_is_a_directory(self, tmp_path):
+        target = tmp_path / "a_directory"
+        target.mkdir()
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        with pytest.raises(BuiltinError) as exc_info:
+            apply_redirections(instruction)
+
+        assert str(exc_info.value) == f"echo: {target}: Is a directory"
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file permission checks")
+    def test_raises_builtin_error_when_permission_denied(self, tmp_path):
+        locked_dir = tmp_path / "locked"
+        locked_dir.mkdir()
+        locked_dir.chmod(0o500)
+        target = locked_dir / "out.md"
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        try:
+            with pytest.raises(BuiltinError) as exc_info:
+                apply_redirections(instruction)
+            assert str(exc_info.value) == f"echo: {target}: Permission denied"
+        finally:
+            locked_dir.chmod(0o700)
+
+    def test_error_message_uses_the_instructions_own_cmd(self, tmp_path):
+        target = tmp_path / "missing_dir" / "out.md"
+        instruction = make_instruction("cat", [], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        with pytest.raises(BuiltinError) as exc_info:
+            apply_redirections(instruction)
+
+        assert str(exc_info.value).startswith("cat:")
+
+    def test_does_not_create_parent_directories_when_redirect_fails(self, tmp_path):
+        target = tmp_path / "missing_dir" / "out.md"
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        with pytest.raises(BuiltinError):
+            apply_redirections(instruction)
+
+        assert not target.parent.exists()
 
 
 # ---------------------------------------------------------------------------

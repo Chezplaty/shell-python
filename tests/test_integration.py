@@ -432,6 +432,64 @@ class TestHandleInvalidCommands:
 
 
 # ---------------------------------------------------------------------------
+# Output redirection: the > and 1> operators
+# ---------------------------------------------------------------------------
+
+class TestOutputRedirection:
+    def test_gt_redirects_output_to_file_instead_of_terminal(self, tmp_path):
+        target = tmp_path / "foo.md"
+
+        out, _ = run_shell([f"echo Hello James > {target}", "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "Hello James"
+        assert "Hello James" not in out
+
+    def test_1gt_behaves_identically_to_gt(self, tmp_path):
+        target = tmp_path / "foo.md"
+
+        out, _ = run_shell([f"echo Hello James 1> {target}", "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "Hello James"
+        assert "Hello James" not in out
+
+    def test_creates_the_target_file_when_it_does_not_exist(self, tmp_path):
+        target = tmp_path / "new_file.md"
+        assert not target.exists()
+
+        run_shell([f"echo created > {target}", "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "created"
+
+    def test_overwrites_an_existing_files_content(self, tmp_path):
+        target = tmp_path / "existing.md"
+        target.write_text("stale content that should be fully replaced")
+
+        run_shell([f"echo fresh > {target}", "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "fresh"
+
+    def test_target_path_can_be_quoted_with_spaces(self, tmp_path):
+        target = tmp_path / "file with spaces.md"
+
+        run_shell([f'echo hi > "{target}"', "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "hi"
+
+    def test_redirect_failure_prints_error_to_terminal_and_writes_no_file(self, tmp_path):
+        missing_dir_target = tmp_path / "does_not_exist" / "out.md"
+
+        out, _ = run_shell([f"echo hi > {missing_dir_target}", "exit"], cwd=tmp_path)
+
+        assert f"echo: {missing_dir_target}: No such file or directory\n" in out
+        assert not missing_dir_target.parent.exists()
+
+    def test_missing_redirect_target_is_a_parse_error(self, tmp_path):
+        out, _ = run_shell(["echo hi >", "exit"], cwd=tmp_path)
+
+        assert "shell: parse error near '\\n'\n" in out
+
+
+# ---------------------------------------------------------------------------
 # #OO8 - Print a prompt
 # ---------------------------------------------------------------------------
 

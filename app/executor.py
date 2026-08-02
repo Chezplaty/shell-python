@@ -23,6 +23,8 @@ def handle_command(instruction: Instruction) -> None:
     Prints an error message when the command is not supported by the shell.
     """
 
+    
+
     handler = BUILTINS.get(instruction.cmd, "")
 
     if handler:

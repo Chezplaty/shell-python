@@ -13,6 +13,7 @@ class Token:
 class TokenType(Enum):
     WORD = auto()
     OVERWRITE = auto()
+    REDIRECT_STDERR = auto()
 
 def finish_token(tokens: list[str], current: list[str]) -> None:
     """
@@ -30,8 +31,10 @@ def finish_token(tokens: list[str], current: list[str]) -> None:
         if word == '>' or word == '1>':
             token_type = TokenType.OVERWRITE
 
+        elif word == '2>':
+            token_type = TokenType.REDIRECT_STDERR
+
         tokens.append(Token(token_type, word))
-        #tokens.append(word)
         current.clear()
 
 class Lexer:

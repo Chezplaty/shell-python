@@ -490,6 +490,64 @@ class TestOutputRedirection:
 
 
 # ---------------------------------------------------------------------------
+# Output redirection: the >> and 1>> operators
+# ---------------------------------------------------------------------------
+
+class TestAppendStdoutRedirection:
+    def test_gtgt_creates_the_target_file_when_it_does_not_exist(self, tmp_path):
+        target = tmp_path / "bar.md"
+        (tmp_path / "baz").mkdir()
+        (tmp_path / "baz" / "apple").write_text("")
+        (tmp_path / "baz" / "banana").write_text("")
+        (tmp_path / "baz" / "blueberry").write_text("")
+
+        out, _ = run_shell([f"ls {tmp_path / 'baz'} >> {target}", "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "apple\nbanana\nblueberry\n"
+        assert "apple" not in out
+
+    def test_1gtgt_appends_across_multiple_invocations_instead_of_overwriting(self, tmp_path):
+        target = tmp_path / "baz.md"
+
+        out, _ = run_shell(
+            [f"echo Hello Emily 1>> {target}", f"echo Hello Maria 1>> {target}", "exit"], cwd=tmp_path
+        )
+
+        assert target.read_text() == "Hello Emily\nHello Maria\n"
+        assert "Hello Emily" not in out
+        assert "Hello Maria" not in out
+
+    def test_gtgt_appends_after_content_written_by_a_prior_overwrite_redirect(self, tmp_path):
+        target = tmp_path / "qux.md"
+        (tmp_path / "baz").mkdir()
+        (tmp_path / "baz" / "apple").write_text("")
+        (tmp_path / "baz" / "banana").write_text("")
+        (tmp_path / "baz" / "blueberry").write_text("")
+
+        run_shell(
+            [f"echo List of files: > {target}", f"ls {tmp_path / 'baz'} >> {target}", "exit"], cwd=tmp_path
+        )
+
+        assert target.read_text() == "List of files:\napple\nbanana\nblueberry\n"
+
+    def test_gtgt_does_not_truncate_existing_file_content(self, tmp_path):
+        target = tmp_path / "existing.md"
+        target.write_text("original content\n")
+
+        run_shell([f"echo appended >> {target}", "exit"], cwd=tmp_path)
+
+        assert target.read_text() == "original content\nappended\n"
+
+    def test_gtgt_redirect_failure_prints_error_to_terminal_and_writes_no_file(self, tmp_path):
+        missing_dir_target = tmp_path / "does_not_exist" / "out.md"
+
+        out, _ = run_shell([f"echo hi >> {missing_dir_target}", "exit"], cwd=tmp_path)
+
+        assert f"echo: {missing_dir_target}: No such file or directory\n" in out
+        assert not missing_dir_target.parent.exists()
+
+
+# ---------------------------------------------------------------------------
 # Output redirection: the 2> operator
 # ---------------------------------------------------------------------------
 

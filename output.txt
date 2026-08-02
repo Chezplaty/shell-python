@@ -1,1 +1,11 @@
-asdfasdfasdf
+asdfasdfasdffirst
+second
+__pycache__
+app
+output.txt
+pyproject.toml
+README.md
+shell_python.egg-info
+tests
+venv
+your_program.sh

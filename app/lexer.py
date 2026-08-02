@@ -15,7 +15,12 @@ class TokenType(Enum):
     REDIRECT_STDOUT = auto()
     REDIRECT_STDERR = auto()
     APPEND_STDOUT = auto()
-    
+
+TOKEN_TYPES = {'>': TokenType.REDIRECT_STDOUT,
+             '1>': TokenType.REDIRECT_STDOUT,
+             '2>': TokenType.REDIRECT_STDERR,
+             '>>': TokenType.APPEND_STDOUT,
+             '1>>': TokenType.APPEND_STDOUT}
 
 def finish_token(tokens: list[str], current: list[str]) -> None:
     """
@@ -23,21 +28,14 @@ def finish_token(tokens: list[str], current: list[str]) -> None:
     Clears the current token buffer so lexing can continue with the next token.
     """
 
-    token_type = TokenType.WORD
+    if not current:
+        return
 
-    if current:
+    word = "".join(current)
+    token_type = TOKEN_TYPES.get(word, TokenType.WORD)
 
-        word = "".join(current)
-
-        #TODO: map the symbols to the token type in a dictionary
-        if word == '>' or word == '1>':
-            token_type = TokenType.REDIRECT_STDOUT
-
-        elif word == '2>':
-            token_type = TokenType.REDIRECT_STDERR
-
-        tokens.append(Token(token_type, word))
-        current.clear()
+    tokens.append(Token(token_type, word))
+    current.clear()
 
 class Lexer:
     """

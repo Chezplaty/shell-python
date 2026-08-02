@@ -334,6 +334,22 @@ class TestResolveRedirectTargets:
 
         assert resolve_redirect_targets(instruction) == {}
 
+    def test_maps_append_stdout_to_fd_1_in_append_mode(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.APPEND_STDOUT, str(target))])
+
+        assert resolve_redirect_targets(instruction) == {1: (str(target), "a")}
+
+    def test_append_stdout_after_overwrite_for_the_same_fd_overrides_it(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction(
+            "echo",
+            ["hi"],
+            [Redirect(TokenType.REDIRECT_STDOUT, str(target)), Redirect(TokenType.APPEND_STDOUT, str(target))],
+        )
+
+        assert resolve_redirect_targets(instruction) == {1: (str(target), "a")}
+
 
 # ---------------------------------------------------------------------------
 # open_redirects
@@ -445,6 +461,24 @@ class TestOpenRedirects:
                 pass
 
         assert not target.parent.exists()
+
+    def test_append_mode_creates_file_when_it_does_not_exist(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.APPEND_STDOUT, str(target))])
+
+        with open_redirects(instruction) as files:
+            assert target.exists()
+            assert set(files) == {1}
+
+    def test_append_mode_preserves_existing_content_and_writes_after_it(self, tmp_path):
+        target = tmp_path / "out.md"
+        target.write_text("existing\n")
+        instruction = make_instruction("echo", ["new"], [Redirect(TokenType.APPEND_STDOUT, str(target))])
+
+        with open_redirects(instruction) as files:
+            files[1].write("new\n")
+
+        assert target.read_text() == "existing\nnew\n"
 
 
 # ---------------------------------------------------------------------------

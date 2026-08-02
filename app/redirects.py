@@ -10,7 +10,9 @@ from app.parser import Instruction
 
 REDIRECT_FD_MODES = {
     TokenType.REDIRECT_STDOUT: (1, "w"),
-    TokenType.REDIRECT_STDERR: (2, "w")
+    TokenType.REDIRECT_STDERR: (2, "w"),
+    TokenType.APPEND_STDOUT: (1, "a"),
+    TokenType.APPEND_STDERR: (2, "a")
 }
 
 def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, str]]:

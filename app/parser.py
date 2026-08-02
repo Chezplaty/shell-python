@@ -11,7 +11,6 @@ class Instruction:
 
 Redirect = namedtuple('Redirect', ['type', 'target'])
 
-
 def parse_overwrite(tokens: list[Token], i: int) -> tuple[Redirect, int]:
     """
     Parses an output overwrite redirection and validates its target filename token.
@@ -47,7 +46,8 @@ def parse(tokens: list[Token]) -> Instruction:
 
         elif token.type in {
             TokenType.REDIRECT_STDOUT,
-            TokenType.REDIRECT_STDERR
+            TokenType.REDIRECT_STDERR,
+            TokenType.APPEND_STDOUT
         }:
             redirect, i = parse_overwrite(tokens, i)
             redirects.append(redirect)

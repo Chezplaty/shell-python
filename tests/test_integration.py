@@ -441,7 +441,7 @@ class TestOutputRedirection:
 
         out, _ = run_shell([f"echo Hello James > {target}", "exit"], cwd=tmp_path)
 
-        assert target.read_text() == "Hello James"
+        assert target.read_text() == "Hello James\n"
         assert "Hello James" not in out
 
     def test_1gt_behaves_identically_to_gt(self, tmp_path):
@@ -449,7 +449,7 @@ class TestOutputRedirection:
 
         out, _ = run_shell([f"echo Hello James 1> {target}", "exit"], cwd=tmp_path)
 
-        assert target.read_text() == "Hello James"
+        assert target.read_text() == "Hello James\n"
         assert "Hello James" not in out
 
     def test_creates_the_target_file_when_it_does_not_exist(self, tmp_path):
@@ -458,7 +458,7 @@ class TestOutputRedirection:
 
         run_shell([f"echo created > {target}", "exit"], cwd=tmp_path)
 
-        assert target.read_text() == "created"
+        assert target.read_text() == "created\n"
 
     def test_overwrites_an_existing_files_content(self, tmp_path):
         target = tmp_path / "existing.md"
@@ -466,14 +466,14 @@ class TestOutputRedirection:
 
         run_shell([f"echo fresh > {target}", "exit"], cwd=tmp_path)
 
-        assert target.read_text() == "fresh"
+        assert target.read_text() == "fresh\n"
 
     def test_target_path_can_be_quoted_with_spaces(self, tmp_path):
         target = tmp_path / "file with spaces.md"
 
         run_shell([f'echo hi > "{target}"', "exit"], cwd=tmp_path)
 
-        assert target.read_text() == "hi"
+        assert target.read_text() == "hi\n"
 
     def test_redirect_failure_prints_error_to_terminal_and_writes_no_file(self, tmp_path):
         missing_dir_target = tmp_path / "does_not_exist" / "out.md"
@@ -487,6 +487,40 @@ class TestOutputRedirection:
         out, _ = run_shell(["echo hi >", "exit"], cwd=tmp_path)
 
         assert "shell: parse error near '\\n'\n" in out
+
+
+# ---------------------------------------------------------------------------
+# Output redirection: the 2> operator
+# ---------------------------------------------------------------------------
+
+class TestStderrRedirection:
+    def test_2gt_redirects_an_external_commands_stderr_to_file(self, tmp_path):
+        existing = tmp_path / "existing_file"
+        existing.write_text("line one\n")
+        errors = tmp_path / "errors.txt"
+
+        out, _ = run_shell(
+            [f"cat {existing} nonexistent 2> {errors}", "exit"], cwd=tmp_path
+        )
+
+        assert "line one\n" in out
+        assert "No such file or directory" not in out
+        assert "nonexistent: No such file or directory" in errors.read_text()
+
+    def test_stdout_and_stderr_can_be_redirected_to_different_files_in_one_command(self, tmp_path):
+        existing = tmp_path / "existing_file"
+        existing.write_text("line one\n")
+        stdout_file = tmp_path / "out.txt"
+        errors = tmp_path / "errors.txt"
+
+        out, _ = run_shell(
+            [f"cat {existing} nonexistent > {stdout_file} 2> {errors}", "exit"], cwd=tmp_path
+        )
+
+        assert "line one" not in out
+        assert "No such file or directory" not in out
+        assert stdout_file.read_text() == "line one\n"
+        assert "nonexistent: No such file or directory" in errors.read_text()
 
 
 # ---------------------------------------------------------------------------

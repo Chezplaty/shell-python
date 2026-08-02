@@ -1,5 +1,6 @@
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from app import executor, main, path_utils, shell_builtins
 from app.errors import BuiltinError
 from app.lexer import Lexer, LexState, TokenType, finish_token
 from app.parser import Instruction, Redirect
-from app.redirects import apply_redirections
+from app.redirects import resolve_redirect_targets, open_redirects, redirected_fds
 
 
 def make_executable(path: Path) -> None:
@@ -78,16 +79,16 @@ class TestHandleExternalPrograms:
     def test_runs_command_when_found(self, monkeypatch):
         monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/ls"))
         calls = []
-        monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
+        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
 
-        executor.handle_external_programs("ls", ["-la"])
+        executor.handle_external_programs("ls", ["-la"], {})
 
-        assert calls == [["ls", "-la"]]
+        assert calls == [(["ls", "-la"], {"stdin": None, "stdout": None, "stderr": None})]
 
     def test_prints_not_found_when_missing(self, monkeypatch, capsys):
         monkeypatch.setattr(executor, "get_executable", lambda cmd: None)
 
-        executor.handle_external_programs("nope", [])
+        executor.handle_external_programs("nope", [], {})
 
         captured = capsys.readouterr()
         assert captured.out == "nope: command not found\n"
@@ -95,20 +96,30 @@ class TestHandleExternalPrograms:
     def test_runs_with_no_args(self, monkeypatch):
         monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/ls"))
         calls = []
-        monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
+        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
 
-        executor.handle_external_programs("ls", [])
+        executor.handle_external_programs("ls", [], {})
 
-        assert calls == [["ls"]]
+        assert calls == [(["ls"], {"stdin": None, "stdout": None, "stderr": None})]
 
     def test_runs_with_multiple_args(self, monkeypatch):
         monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/cp"))
         calls = []
-        monkeypatch.setattr(executor.subprocess, "run", lambda args: calls.append(args))
+        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
 
-        executor.handle_external_programs("cp", ["a.txt", "b.txt", "-v"])
+        executor.handle_external_programs("cp", ["a.txt", "b.txt", "-v"], {})
 
-        assert calls == [["cp", "a.txt", "b.txt", "-v"]]
+        assert calls == [(["cp", "a.txt", "b.txt", "-v"], {"stdin": None, "stdout": None, "stderr": None})]
+
+    def test_forwards_resolved_redirect_files_to_subprocess_run(self, monkeypatch):
+        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/cat"))
+        calls = []
+        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
+        stdout_file, stderr_file = object(), object()
+
+        executor.handle_external_programs("cat", ["a.txt"], {1: stdout_file, 2: stderr_file})
+
+        assert calls == [(["cat", "a.txt"], {"stdin": None, "stdout": stdout_file, "stderr": stderr_file})]
 
 
 # ---------------------------------------------------------------------------
@@ -280,62 +291,34 @@ class TestHandlePwd:
 
 
 # ---------------------------------------------------------------------------
-# apply_redirections
+# resolve_redirect_targets
 # ---------------------------------------------------------------------------
 
-class TestApplyRedirections:
-    def test_creates_file_when_it_does_not_exist(self, tmp_path):
+class TestResolveRedirectTargets:
+    def test_maps_overwrite_to_fd_1_in_write_mode(self, tmp_path):
         target = tmp_path / "out.md"
-        instruction = make_instruction("echo", ["hello", "world"], [Redirect(TokenType.OVERWRITE, str(target))])
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
 
-        apply_redirections(instruction)
+        assert resolve_redirect_targets(instruction) == {1: (str(target), "w")}
 
-        assert target.read_text() == "hello world"
+    def test_maps_redirect_stderr_to_fd_2_in_write_mode(self, tmp_path):
+        target = tmp_path / "err.md"
+        instruction = make_instruction("cat", [], [Redirect(TokenType.REDIRECT_STDERR, str(target))])
 
-    def test_overwrites_existing_file_content_instead_of_appending(self, tmp_path):
-        target = tmp_path / "out.md"
-        target.write_text("old content that is much longer than the new content")
-        instruction = make_instruction("echo", ["new"], [Redirect(TokenType.OVERWRITE, str(target))])
+        assert resolve_redirect_targets(instruction) == {2: (str(target), "w")}
 
-        apply_redirections(instruction)
+    def test_stdout_and_stderr_redirects_resolve_to_independent_targets(self, tmp_path):
+        out = tmp_path / "out.md"
+        err = tmp_path / "err.md"
+        instruction = make_instruction(
+            "cat",
+            [],
+            [Redirect(TokenType.OVERWRITE, str(out)), Redirect(TokenType.REDIRECT_STDERR, str(err))],
+        )
 
-        assert target.read_text() == "new"
+        assert resolve_redirect_targets(instruction) == {1: (str(out), "w"), 2: (str(err), "w")}
 
-    def test_writes_empty_string_when_no_args(self, tmp_path):
-        target = tmp_path / "out.md"
-        instruction = make_instruction("echo", [], [Redirect(TokenType.OVERWRITE, str(target))])
-
-        apply_redirections(instruction)
-
-        assert target.read_text() == ""
-
-    def test_joins_multiple_args_with_a_single_space(self, tmp_path):
-        target = tmp_path / "out.md"
-        instruction = make_instruction("echo", ["a", "b", "c"], [Redirect(TokenType.OVERWRITE, str(target))])
-
-        apply_redirections(instruction)
-
-        assert target.read_text() == "a b c"
-
-    def test_does_not_append_a_trailing_newline(self, tmp_path):
-        # Known gap vs. real shells: `echo` normally appends a newline, but
-        # apply_redirections writes the raw joined args with nothing after them.
-        target = tmp_path / "out.md"
-        instruction = make_instruction("echo", ["Hello"], [Redirect(TokenType.OVERWRITE, str(target))])
-
-        apply_redirections(instruction)
-
-        assert target.read_bytes() == b"Hello"
-
-    def test_ignores_redirects_that_are_not_overwrite_type(self, tmp_path):
-        target = tmp_path / "out.md"
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.WORD, str(target))])
-
-        apply_redirections(instruction)
-
-        assert not target.exists()
-
-    def test_applies_each_redirect_to_its_own_target(self, tmp_path):
+    def test_later_redirect_for_the_same_fd_overrides_the_earlier_one(self, tmp_path):
         first = tmp_path / "first.md"
         second = tmp_path / "second.md"
         instruction = make_instruction(
@@ -344,22 +327,75 @@ class TestApplyRedirections:
             [Redirect(TokenType.OVERWRITE, str(first)), Redirect(TokenType.OVERWRITE, str(second))],
         )
 
-        apply_redirections(instruction)
+        assert resolve_redirect_targets(instruction) == {1: (str(second), "w")}
 
-        assert first.read_text() == "hi"
-        assert second.read_text() == "hi"
+    def test_no_redirects_returns_an_empty_mapping(self, tmp_path):
+        instruction = make_instruction("echo", ["hi"], [])
+
+        assert resolve_redirect_targets(instruction) == {}
+
+
+# ---------------------------------------------------------------------------
+# open_redirects
+# ---------------------------------------------------------------------------
+
+class TestOpenRedirects:
+    def test_creates_file_when_it_does_not_exist(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["hello", "world"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        with open_redirects(instruction) as files:
+            assert target.exists()
+            assert set(files) == {1}
+
+    def test_overwrite_mode_lets_the_caller_truncate_existing_content(self, tmp_path):
+        target = tmp_path / "out.md"
+        target.write_text("old content that is much longer than the new content")
+        instruction = make_instruction("echo", ["new"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        with open_redirects(instruction) as files:
+            files[1].write("new")
+
+        assert target.read_text() == "new"
+
+    def test_stdout_and_stderr_redirects_open_to_their_own_targets(self, tmp_path):
+        out = tmp_path / "out.md"
+        err = tmp_path / "err.md"
+        instruction = make_instruction(
+            "cat",
+            [],
+            [Redirect(TokenType.OVERWRITE, str(out)), Redirect(TokenType.REDIRECT_STDERR, str(err))],
+        )
+
+        with open_redirects(instruction) as files:
+            files[1].write("stdout content")
+            files[2].write("stderr content")
+
+        assert out.read_text() == "stdout content"
+        assert err.read_text() == "stderr content"
+
+    def test_closes_opened_files_once_the_block_exits(self, tmp_path):
+        target = tmp_path / "out.md"
+        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
+
+        with open_redirects(instruction) as files:
+            opened_file = files[1]
+
+        assert opened_file.closed
 
     def test_does_nothing_when_there_are_no_redirects(self, tmp_path):
         instruction = make_instruction("echo", ["hi"], [])
 
-        apply_redirections(instruction)  # should not raise
+        with open_redirects(instruction) as files:
+            assert files == {}
 
     def test_raises_builtin_error_when_parent_directory_is_missing(self, tmp_path):
         target = tmp_path / "missing_dir" / "out.md"
         instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
 
         with pytest.raises(BuiltinError) as exc_info:
-            apply_redirections(instruction)
+            with open_redirects(instruction):
+                pass
 
         assert str(exc_info.value) == f"echo: {target}: No such file or directory"
 
@@ -369,7 +405,8 @@ class TestApplyRedirections:
         instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
 
         with pytest.raises(BuiltinError) as exc_info:
-            apply_redirections(instruction)
+            with open_redirects(instruction):
+                pass
 
         assert str(exc_info.value) == f"echo: {target}: Is a directory"
 
@@ -383,7 +420,8 @@ class TestApplyRedirections:
 
         try:
             with pytest.raises(BuiltinError) as exc_info:
-                apply_redirections(instruction)
+                with open_redirects(instruction):
+                    pass
             assert str(exc_info.value) == f"echo: {target}: Permission denied"
         finally:
             locked_dir.chmod(0o700)
@@ -393,7 +431,8 @@ class TestApplyRedirections:
         instruction = make_instruction("cat", [], [Redirect(TokenType.OVERWRITE, str(target))])
 
         with pytest.raises(BuiltinError) as exc_info:
-            apply_redirections(instruction)
+            with open_redirects(instruction):
+                pass
 
         assert str(exc_info.value).startswith("cat:")
 
@@ -402,9 +441,63 @@ class TestApplyRedirections:
         instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.OVERWRITE, str(target))])
 
         with pytest.raises(BuiltinError):
-            apply_redirections(instruction)
+            with open_redirects(instruction):
+                pass
 
         assert not target.parent.exists()
+
+
+# ---------------------------------------------------------------------------
+# redirected_fds
+# ---------------------------------------------------------------------------
+
+class TestRedirectedFds:
+    def test_no_redirects_is_a_no_op(self, capsys):
+        with redirected_fds({}):
+            print("hi")
+
+        assert capsys.readouterr().out == "hi\n"
+
+    def test_print_lands_in_the_redirected_file_instead_of_stdout(self, tmp_path, capfd):
+        # capfd.disabled() hands fd 1 back to the real terminal for this block.
+        # Without it, pytest's own capture already owns fd 1 through a separate
+        # duplicated descriptor, so our dup2 swap wouldn't affect where
+        # sys.stdout's writes actually land.
+        target = tmp_path / "out.md"
+
+        with capfd.disabled():
+            with open(target, "w") as f:
+                with redirected_fds({1: f}):
+                    print("hi")
+
+        assert target.read_text() == "hi\n"
+
+    def test_fd_1_is_restored_to_its_original_target_after_the_block(self, tmp_path):
+        target = tmp_path / "out.md"
+        before = os.fstat(1)
+
+        with open(target, "w") as f:
+            with redirected_fds({1: f}):
+                during = os.fstat(1)
+
+        after = os.fstat(1)
+
+        assert (during.st_dev, during.st_ino) == (os.stat(target).st_dev, os.stat(target).st_ino)
+        assert (during.st_dev, during.st_ino) != (before.st_dev, before.st_ino)
+        assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+
+    def test_stdout_and_stderr_are_redirected_independently(self, tmp_path, capfd):
+        out = tmp_path / "out.md"
+        err = tmp_path / "err.md"
+
+        with capfd.disabled():
+            with open(out, "w") as out_file, open(err, "w") as err_file:
+                with redirected_fds({1: out_file, 2: err_file}):
+                    print("stdout line")
+                    print("stderr line", file=sys.stderr)
+
+        assert out.read_text() == "stdout line\n"
+        assert err.read_text() == "stderr line\n"
 
 
 # ---------------------------------------------------------------------------
@@ -435,12 +528,35 @@ class TestHandleCommand:
     def test_unrecognized_command_delegates_to_external_programs(self, monkeypatch):
         seen = []
         monkeypatch.setattr(
-            executor, "handle_external_programs", lambda cmd, args: seen.append((cmd, args))
+            executor, "handle_external_programs", lambda cmd, args, files: seen.append((cmd, args, files))
         )
 
         executor.handle_command(make_instruction("ls", ["-la"]))
 
-        assert seen == [("ls", ["-la"])]
+        assert seen == [("ls", ["-la"], {})]
+
+    def test_echo_redirected_to_a_file_writes_there_instead_of_stdout(self, capfd, tmp_path):
+        target = tmp_path / "out.md"
+
+        with capfd.disabled():
+            executor.handle_command(
+                make_instruction("echo", ["hello", "world"], [Redirect(TokenType.OVERWRITE, str(target))])
+            )
+
+        assert target.read_text() == "hello world\n"
+
+    def test_external_command_stderr_redirect_leaves_stdout_untouched(self, monkeypatch, tmp_path):
+        target = tmp_path / "err.md"
+        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/cat"))
+        calls = []
+        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append(kwargs))
+
+        executor.handle_command(
+            make_instruction("cat", ["missing"], [Redirect(TokenType.REDIRECT_STDERR, str(target))])
+        )
+
+        assert calls[0]["stdout"] is None
+        assert calls[0]["stderr"].name == str(target)
 
     def test_exact_match_required_not_prefix(self, capsys):
         executor.handle_command(make_instruction("echoing", ["surprise"]))

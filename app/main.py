@@ -1,63 +1,85 @@
 import sys
+import tty
+import termios
+
 from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
 from app.lexer import Lexer
 from app.parser import parse
 
-import tty
-import termios
+from app.shell_builtins import BUILTINS
+
+def line_editor():
+    fd = sys.stdin.fileno()
+    old_settings = tty.setcbreak(fd)
+    buffer = []
+    try:
+        
+        while True:
+
+            char = sys.stdin.read(1)#read one character at a time
+
+            sys.stdout.write(char)
+            sys.stdout.flush()
+
+
+            if char == '\n':
+                return "".join(buffer)
+
+            #tab character
+            if char == '\t':
+                #autocomplete function
+                word = "".join(buffer)
+                #search for prefix
+                candidates = []
+                for candidate in BUILTINS.keys():
+                    if candidate.startswith(word):
+                        candidates.append(candidate)
+
+                if candidates:
+                    sys.stdout.write("\r\033[2K")
+                    sys.stdout.write(f"$ {candidates[0]}")
+                    sys.stdout.flush()
+                    buffer.clear()
+                    buffer.append(candidates[0])
+            else:
+                buffer.append(char)
+                    
+    finally:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
 
 def main():
     """
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
-    fd = sys.stdin.fileno()
-    old_settings = tty.setcbreak(fd)
-
-    
-    try:
-        while True:
-            sys.stdout.write("$ ")
-            sys.stdout.flush() 
-
-            char = sys.stdin.read(1)#read one character at a time
-            print(char)
-
-            if char == 'q':
-                break
-    finally:
-        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
          
 
-    # while True:
-    #     sys.stdout.write("$ ")
+    while True:
+        sys.stdout.write("$ ")
+        sys.stdout.flush()
 
-    #     #TODO: implement tab autocompletion
+        #TODO: implement tab autocompletion
 
-        
-    #     #fd = sys.stdin.fileno()
-    #     #old_settings = tty.setcbreak(fd) #set stdin into cbreak mode
+        #line = input()
 
+        line = line_editor()
 
+        tokens = Lexer().tokenize(line)
 
-    #     line = input()
+        try:
+            instruction = parse(tokens)
+        except ParseError as e:
+            print(f"shell: {e}")
+            continue
 
-    #     tokens = Lexer().tokenize(line)
+        if instruction.cmd == "exit":
+            break
 
-    #     try:
-    #         instruction = parse(tokens)
-    #     except ParseError as e:
-    #         print(f"shell: {e}")
-    #         continue
-
-    #     if instruction.cmd == "exit":
-    #         break
-
-    #     try:
-    #         handle_command(instruction)
-    #     except BuiltinError as e:
-    #         print(e)
+        try:
+            handle_command(instruction)
+        except BuiltinError as e:
+            print(e)
 
 if __name__ == "__main__":
     main()

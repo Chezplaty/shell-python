@@ -4,32 +4,60 @@ from app.executor import handle_command
 from app.lexer import Lexer
 from app.parser import parse
 
+import tty
+import termios
+
 def main():
     """
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
+    fd = sys.stdin.fileno()
+    old_settings = tty.setcbreak(fd)
 
-    while True:
-        sys.stdout.write("$ ")
+    
+    try:
+        while True:
+            sys.stdout.write("$ ")
+            sys.stdout.flush() 
 
-        line = input()
+            char = sys.stdin.read(1)#read one character at a time
+            print(char)
 
-        tokens = Lexer().tokenize(line)
+            if char == 'q':
+                break
+    finally:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
+         
 
-        try:
-            instruction = parse(tokens)
-        except ParseError as e:
-            print(f"shell: {e}")
-            continue
+    # while True:
+    #     sys.stdout.write("$ ")
 
-        if instruction.cmd == "exit":
-            break
+    #     #TODO: implement tab autocompletion
 
-        try:
-            handle_command(instruction)
-        except BuiltinError as e:
-            print(e)
+        
+    #     #fd = sys.stdin.fileno()
+    #     #old_settings = tty.setcbreak(fd) #set stdin into cbreak mode
+
+
+
+    #     line = input()
+
+    #     tokens = Lexer().tokenize(line)
+
+    #     try:
+    #         instruction = parse(tokens)
+    #     except ParseError as e:
+    #         print(f"shell: {e}")
+    #         continue
+
+    #     if instruction.cmd == "exit":
+    #         break
+
+    #     try:
+    #         handle_command(instruction)
+    #     except BuiltinError as e:
+    #         print(e)
 
 if __name__ == "__main__":
     main()

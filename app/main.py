@@ -15,6 +15,7 @@ def main():
     Continuously prompts the user for input until the exit command is received.
     """
 
+    #TODO: only returning an empty line gives an error
     try:
 
         while True:
@@ -26,6 +27,9 @@ def main():
             sys.stdout.flush()
 
             line = LineEditor().run()
+
+            if not line.strip(): #empty input
+                continue
             
             #restore after getting line
             termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)

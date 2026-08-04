@@ -85,6 +85,7 @@ class LineEditor:
 
             if key == '\t':
                 self.handle_tab()
+                continue
 
             self.tab_cursor = None
             if key == '\x7f':
@@ -96,8 +97,13 @@ class LineEditor:
         self.buffer.append(key)
 
     def handle_tab(self):
+        prefix = "".join(self.buffer)
+        if not prefix:
+            bell()
+            return
+        
         if self.tab_cursor is None:
-            candidates = get_candidates("".join(self.buffer))
+            candidates = get_candidates(prefix)
             if candidates:
                 self.tab_cursor = CandidateCursor(candidates)
             else: #no candidates found

@@ -12,8 +12,11 @@ import termios
 
 
 @contextmanager
-def set_cbreak_mode() -> None:
-
+def set_cbreak_mode():
+    """
+    Temporarily switches stdin into cbreak mode for character-by-character input.
+    Restores the original terminal settings when the context exits.
+    """
     fd = sys.stdin.fileno()
     old_settings = tty.setcbreak(fd)
 
@@ -21,7 +24,6 @@ def set_cbreak_mode() -> None:
         yield 
     finally:
         termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
-
 
 def main():
     """

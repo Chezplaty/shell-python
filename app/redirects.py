@@ -69,7 +69,7 @@ def redirected_fds(files: dict[int, IO]) -> Generator[None]:
     sys.stdout.flush()
     sys.stderr.flush()
 
-    #get new un-used fd number that points to samce place original fd does
+    #get new un-used fd number that points to same place original fd does
     saved = {fd: os.dup(fd) for fd in files}
 
     try:

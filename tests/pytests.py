@@ -1091,67 +1091,71 @@ class TestLineEditorBackspace:
             return next(self._keys)
 
     def _run_line_editor(self, monkeypatch, keys):
-        monkeypatch.setattr(line_editor.tty, "setcbreak", lambda fd: None)
-        monkeypatch.setattr(line_editor.termios, "tcsetattr", lambda *args, **kwargs: None)
         monkeypatch.setattr(line_editor.sys, "stdin", self.FakeStdin(keys))
 
-        return line_editor.line_editor()
+        return line_editor.LineEditor().run()
 
     def test_backspace_removes_last_character_and_erases_it_on_screen(self, monkeypatch, capsys):
         result = self._run_line_editor(monkeypatch, ["a", "b", "\x7f", "\n"])
 
-        assert result == "a"
-        assert capsys.readouterr().out == "ab\b \b"
+        # '\n' is appended to the buffer like any other key (see add_key), so
+        # it's included both in the returned line and in the echoed output.
+        assert result == "a\n"
+        assert capsys.readouterr().out == "ab\b \b\n"
 
     def test_backspace_on_empty_buffer_is_a_no_op(self, monkeypatch, capsys):
         result = self._run_line_editor(monkeypatch, ["\x7f", "a", "\n"])
 
-        assert result == "a"
+        assert result == "a\n"
         assert "\b \b" not in capsys.readouterr().out
 
 
 class TestAutocomplete:
     def test_unique_prefix_completes_in_place(self, capsys):
-        buffer = list("ech")
+        editor = line_editor.LineEditor()
+        editor.buffer = list("ech")
 
-        result = line_editor.autocomplete(buffer)
+        editor.handle_tab()
 
-        assert result == ["echo"]
-        assert buffer == ["echo"]
+        assert editor.buffer == list("echo")
 
     def test_shared_prefix_completes_to_the_first_match_alphabetically(self, capsys):
-        buffer = list("e")
+        editor = line_editor.LineEditor()
+        editor.buffer = list("e")
 
-        result = line_editor.autocomplete(buffer)
+        editor.handle_tab()
 
-        assert result == ["echo"]
+        assert editor.buffer == list("echo")
 
     def test_completion_redraws_the_line_with_the_full_word(self, capsys):
-        buffer = list("ech")
+        editor = line_editor.LineEditor()
+        editor.buffer = list("ech")
 
-        line_editor.autocomplete(buffer)
+        editor.handle_tab()
 
         assert capsys.readouterr().out == "\r\033[2K$ echo"
 
     def test_no_match_rings_the_bell(self, capsys):
-        buffer = list("zzz")
+        editor = line_editor.LineEditor()
+        editor.buffer = list("zzz")
 
-        line_editor.autocomplete(buffer)
+        editor.handle_tab()
 
         assert capsys.readouterr().out == "\x07"
 
     def test_no_match_leaves_the_buffer_unchanged(self, capsys):
-        buffer = list("zzz")
+        editor = line_editor.LineEditor()
+        editor.buffer = list("zzz")
 
-        result = line_editor.autocomplete(buffer)
+        editor.handle_tab()
 
-        assert result == list("zzz")
-        assert buffer == list("zzz")
+        assert editor.buffer == list("zzz")
 
     def test_no_match_does_not_redraw_the_line(self, capsys):
-        buffer = list("zzz")
+        editor = line_editor.LineEditor()
+        editor.buffer = list("zzz")
 
-        line_editor.autocomplete(buffer)
+        editor.handle_tab()
 
         assert "\033[2K" not in capsys.readouterr().out
 
@@ -1161,8 +1165,26 @@ class TestAutocomplete:
 # ---------------------------------------------------------------------------
 
 class TestMain:
+    class _FakeStdin:
+        def fileno(self):
+            return 0
+
+    def _stub_line_editor(self, monkeypatch, inputs):
+        # main() now wraps LineEditor().run() in set_cbreak_mode(), which calls
+        # sys.stdin.fileno() and tty.setcbreak()/termios.tcsetattr() on it -
+        # not valid under pytest's captured, non-tty stdin, so both are stubbed.
+        monkeypatch.setattr(main.sys, "stdin", self._FakeStdin())
+        monkeypatch.setattr(main.tty, "setcbreak", lambda fd: None)
+        monkeypatch.setattr(main.termios, "tcsetattr", lambda *args, **kwargs: None)
+
+        class FakeLineEditor:
+            def run(self):
+                return next(inputs)
+
+        monkeypatch.setattr(main, "LineEditor", FakeLineEditor)
+
     def test_exits_immediately_on_exit_command(self, monkeypatch, capsys):
-        monkeypatch.setattr(main, "line_editor", lambda: "exit")
+        self._stub_line_editor(monkeypatch, iter(["exit"]))
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
@@ -1174,8 +1196,7 @@ class TestMain:
         assert capsys.readouterr().out == "$ "
 
     def test_processes_commands_until_exit(self, monkeypatch, capsys):
-        inputs = iter(["echo hi", "type ls", "exit"])
-        monkeypatch.setattr(main, "line_editor", lambda: next(inputs))
+        self._stub_line_editor(monkeypatch, iter(["echo hi", "type ls", "exit"]))
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
@@ -1186,8 +1207,7 @@ class TestMain:
         assert calls == [("echo", ["hi"]), ("type", ["ls"])]
 
     def test_collapses_repeated_whitespace_between_args(self, monkeypatch):
-        inputs = iter(["echo    hi     there", "exit"])
-        monkeypatch.setattr(main, "line_editor", lambda: next(inputs))
+        self._stub_line_editor(monkeypatch, iter(["echo    hi     there", "exit"]))
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
@@ -1197,13 +1217,10 @@ class TestMain:
 
         assert calls == [("echo", ["hi", "there"])]
 
-    def test_empty_line_produces_empty_command_without_crashing(self, monkeypatch):
-        # Previously an empty line crashed with IndexError (line.split()[0] on
-        # an empty list). The lexer/parser refactor fixed this: tokenize("")
-        # returns no tokens, and parse() only reads tokens[0] inside the loop
-        # guard, so an empty line now parses to an empty, harmless command.
-        inputs = iter(["", "exit"])
-        monkeypatch.setattr(main, "line_editor", lambda: next(inputs))
+    def test_empty_line_is_skipped_without_crashing(self, monkeypatch):
+        # main() checks `if not line.strip(): continue` before parsing, so a
+        # blank line just redraws the prompt - handle_command is never called.
+        self._stub_line_editor(monkeypatch, iter(["", "exit"]))
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
@@ -1211,4 +1228,4 @@ class TestMain:
 
         main.main()
 
-        assert calls == [("", [])]
+        assert calls == []

@@ -6,34 +6,48 @@ from app.lexer import Lexer
 from app.line_editor import line_editor
 from app.parser import parse
 
+import tty
+import termios
+
 def main():
     """
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
-         
 
-    while True:
-        sys.stdout.write("$ ")
-        sys.stdout.flush()
+    try:
 
-        line = line_editor()
+        while True:
+            #set cbreak
+            fd = sys.stdin.fileno()
+            old_settings = tty.setcbreak(fd)
 
-        tokens = Lexer().tokenize(line)
+            sys.stdout.write("$ ")
+            sys.stdout.flush()
 
-        try:
-            instruction = parse(tokens)
-        except ParseError as e:
-            print(f"shell: {e}")
-            continue
+            line = line_editor()
 
-        if instruction.cmd == "exit":
-            break
+            #restore after getting line
+            termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
 
-        try:
-            handle_command(instruction)
-        except BuiltinError as e:
-            print(e)
+            tokens = Lexer().tokenize(line)
+
+            try:
+                instruction = parse(tokens)
+            except ParseError as e:
+                print(f"shell: {e}")
+                continue
+
+            if instruction.cmd == "exit":
+                break
+
+            try:
+                handle_command(instruction)
+            except BuiltinError as e:
+                print(e)
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
 
 if __name__ == "__main__":
     main()

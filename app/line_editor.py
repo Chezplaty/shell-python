@@ -62,73 +62,56 @@ def redraw(output: str) -> None:
     sys.stdout.write(f"$ {output}")
     sys.stdout.flush()
 
-# def autocomplete(buffer: list[str]) -> list[str]:
-#     """
-#     Replaces the current buffer with the first matching completion.
-#     Emits a terminal bell when no completion candidates are found.
-#     """
+def bell() -> None:
+    sys.stdout.write('\x07') #bell sound
+    sys.stdout.flush()
 
-#     candidates = get_candidates("".join(buffer))
 
-#     #choose candidate
-#     cursor = CandidateCursor(candidates)
+class LineEditor:
 
-#     if candidates:
-#         buffer.clear()
-#         buffer.extend(candidates[0])
-#         redraw(candidates[0])
-#     else:
-#         sys.stdout.write('\x07') #bell sound
-#         sys.stdout.flush()
+    def __init__(self):
+        self.buffer = []
+        self.tab_cursor = None
 
-#     return buffer
-
-def line_editor():
-    #TODO: turn into context manager
-    fd = sys.stdin.fileno()
-    old_settings = tty.setcbreak(fd)
-    buffer = []
-    tab_cursor = None
-    try:
-
+    def run(self):
         while True:
-
-            key = sys.stdin.read(1) #read one character at a time
+            key = sys.stdin.read(1) #read one char at a time
 
             if key == '\n':
-                return "".join(buffer)
+                return "".join(self.buffer)
 
-            #tab character
             if key == '\t':
-
-                #has not pressed tab yet, get new candidates
-                if tab_cursor is None:
-                    candidates = get_candidates("".join(buffer))
-                    if candidates:
-                        tab_cursor = CandidateCursor(candidates)
-                    else: #no candidates found
-                        sys.stdout.write('\x07') #bell sound
-                        sys.stdout.flush()
-                        continue
-
-                candidate = tab_cursor.next()
-                redraw(candidate)
-                buffer.clear()
-                buffer.extend(candidate)
+                self.handle_tab()
                 continue
 
-            tab_cursor = None
-
+            self.tab_cursor = None
             if key == '\x7f':
-                if buffer:
-                    buffer.pop()
-                    sys.stdout.write("\b \b")
-                    sys.stdout.flush()
+                self.handle_backspace()
                 continue
 
-            sys.stdout.write(key)
-            sys.stdout.flush()
-            buffer.append(key)
+            self.add_key(key)
 
-    finally:
-        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
+    def add_key(self, key: str):
+        sys.stdout.write(key)
+        sys.stdout.flush()
+        self.buffer.append(key)
+
+    def handle_tab(self):
+        if self.tab_cursor is None:
+            candidates = get_candidates("".join(self.buffer))
+            if candidates:
+                self.tab_cursor = CandidateCursor(candidates)
+            else: #no candidates found
+                bell()
+                return
+
+        candidate = self.tab_cursor.next()
+        redraw(candidate)
+        self.buffer.clear()
+        self.buffer.extend(candidate)
+
+    def handle_backspace(self):
+        if self.buffer:
+            self.buffer.pop()
+            sys.stdout.write("\b \b")
+            sys.stdout.flush()

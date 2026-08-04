@@ -1079,6 +1079,37 @@ class TestRedraw:
         assert capsys.readouterr().out == "\r\033[2K$ "
 
 
+class TestLineEditorBackspace:
+    class FakeStdin:
+        def __init__(self, keys):
+            self._keys = iter(keys)
+
+        def fileno(self):
+            return 0
+
+        def read(self, n):
+            return next(self._keys)
+
+    def _run_line_editor(self, monkeypatch, keys):
+        monkeypatch.setattr(line_editor.tty, "setcbreak", lambda fd: None)
+        monkeypatch.setattr(line_editor.termios, "tcsetattr", lambda *args, **kwargs: None)
+        monkeypatch.setattr(line_editor.sys, "stdin", self.FakeStdin(keys))
+
+        return line_editor.line_editor()
+
+    def test_backspace_removes_last_character_and_erases_it_on_screen(self, monkeypatch, capsys):
+        result = self._run_line_editor(monkeypatch, ["a", "b", "\x7f", "\n"])
+
+        assert result == "a"
+        assert capsys.readouterr().out == "ab\b \b"
+
+    def test_backspace_on_empty_buffer_is_a_no_op(self, monkeypatch, capsys):
+        result = self._run_line_editor(monkeypatch, ["\x7f", "a", "\n"])
+
+        assert result == "a"
+        assert "\b \b" not in capsys.readouterr().out
+
+
 class TestAutocomplete:
     def test_unique_prefix_completes_in_place(self, capsys):
         buffer = list("ech")

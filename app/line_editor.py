@@ -60,7 +60,7 @@ def autocomplete(buffer: list[str]) -> list[str]:
 
     if candidates:
         buffer.clear()
-        buffer.append(candidates[0])
+        buffer.extend(candidates[0])
         redraw(candidates[0])
     else:
         sys.stdout.write('\x07') #bell sound
@@ -77,20 +77,27 @@ def line_editor():
 
         while True:
 
-            char = sys.stdin.read(1) #read one character at a time
+            key = sys.stdin.read(1) #read one character at a time
 
-            sys.stdout.write(char)
-            sys.stdout.flush()
-
-            if char == '\n':
+            if key == '\n':
                 return "".join(buffer)
 
+            #backspace
+            if key == '\x7f':
+                if buffer:
+                    buffer.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+                continue
+
             #tab character
-            if char == '\t':
+            elif key == '\t':
                 buffer = autocomplete(buffer)
                 continue
 
-            buffer.append(char)
+            sys.stdout.write(key)
+            sys.stdout.flush()
+            buffer.append(key)
 
     finally:
         termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)

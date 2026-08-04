@@ -779,3 +779,17 @@ class TestTabAutocompletion:
 
         assert "\033[2K$ echo" in out
         assert returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# Backspace editing
+# ---------------------------------------------------------------------------
+
+class TestBackspace:
+    def test_backspace_deletes_the_previous_character_before_the_command_runs(self):
+        # Types "echo ab", presses Backspace (erasing "b"), then types "c"
+        # and Enter - so the executed command is "echo ac", not "echo ab".
+        out, _ = run_shell(["echo ab\x7fc", "exit"])
+
+        assert "\b \b" in out
+        assert "ac\n" in out

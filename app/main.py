@@ -17,8 +17,6 @@ def main():
         sys.stdout.write("$ ")
         sys.stdout.flush()
 
-        #line = input()
-
         line = line_editor()
 
         tokens = Lexer().tokenize(line)

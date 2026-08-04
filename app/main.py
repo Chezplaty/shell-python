@@ -6,8 +6,22 @@ from app.lexer import Lexer
 from app.line_editor import LineEditor
 from app.parser import parse
 
+from contextlib import contextmanager
 import tty
 import termios
+
+
+@contextmanager
+def set_cbreak_mode() -> None:
+
+    fd = sys.stdin.fileno()
+    old_settings = tty.setcbreak(fd)
+
+    try:
+        yield 
+    finally:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
+
 
 def main():
     """
@@ -15,43 +29,33 @@ def main():
     Continuously prompts the user for input until the exit command is received.
     """
 
-    #TODO: only returning an empty line gives an error
-    try:
-
-        while True:
-            #set cbreak
-            fd = sys.stdin.fileno()
-            old_settings = tty.setcbreak(fd)
+    while True:
+        with set_cbreak_mode():
 
             sys.stdout.write("$ ")
             sys.stdout.flush()
 
             line = LineEditor().run()
+        #restore on exit
 
-            if not line.strip(): #empty input
-                continue
-            
-            #restore after getting line
-            termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
+        if not line.strip(): 
+            continue
 
-            tokens = Lexer().tokenize(line)
+        tokens = Lexer().tokenize(line)
 
-            try:
-                instruction = parse(tokens)
-            except ParseError as e:
-                print(f"shell: {e}")
-                continue
+        try:
+            instruction = parse(tokens)
+        except ParseError as e:
+            print(f"shell: {e}")
+            continue
 
-            if instruction.cmd == "exit":
-                break
+        if instruction.cmd == "exit":
+            break
 
-            try:
-                handle_command(instruction)
-            except BuiltinError as e:
-                print(e)
-
-    finally:
-        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
+        try:
+            handle_command(instruction)
+        except BuiltinError as e:
+            print(e)
 
 if __name__ == "__main__":
     main()

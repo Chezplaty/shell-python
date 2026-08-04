@@ -73,23 +73,22 @@ class LineEditor:
         self.buffer = []
         self.tab_cursor = None
 
-    def run(self):
+    def run(self) -> str:
         while True:
             key = sys.stdin.read(1) #read one char at a time
+
+            if key not in {'\t', '\x7f'}:
+                self.add_key(key)
 
             if key == '\n':
                 return "".join(self.buffer)
 
             if key == '\t':
                 self.handle_tab()
-                continue
 
             self.tab_cursor = None
             if key == '\x7f':
                 self.handle_backspace()
-                continue
-
-            self.add_key(key)
 
     def add_key(self, key: str):
         sys.stdout.write(key)

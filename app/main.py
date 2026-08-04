@@ -3,7 +3,7 @@ import sys
 from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
 from app.lexer import Lexer
-from app.line_editor import line_editor
+from app.line_editor import LineEditor
 from app.parser import parse
 
 import tty
@@ -25,8 +25,8 @@ def main():
             sys.stdout.write("$ ")
             sys.stdout.flush()
 
-            line = line_editor()
-
+            line = LineEditor().run()
+            
             #restore after getting line
             termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
 

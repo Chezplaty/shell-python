@@ -1028,12 +1028,110 @@ class TestTokenize:
 
 
 # ---------------------------------------------------------------------------
+# Tab-completion for builtins: find_insertion_point / get_candidates
+# ---------------------------------------------------------------------------
+
+class TestFindInsertionPoint:
+    def test_returns_index_of_matching_builtin(self):
+        assert main.find_insertion_point("echo") == main.BUILTINS.index("echo")
+
+    def test_returns_index_where_a_missing_prefix_would_be_inserted(self):
+        # "ex" sorts between "echo" and "exit" in the builtin list.
+        assert main.find_insertion_point("ex") == main.BUILTINS.index("exit")
+
+    def test_empty_prefix_returns_zero(self):
+        assert main.find_insertion_point("") == 0
+
+    def test_prefix_sorting_after_every_builtin_returns_list_length(self):
+        assert main.find_insertion_point("zzz") == len(main.BUILTINS)
+
+
+class TestGetCandidates:
+    def test_unique_prefix_returns_single_match(self):
+        assert main.get_candidates("ech") == ["echo"]
+
+    def test_shared_prefix_returns_all_matches_in_sorted_order(self):
+        assert main.get_candidates("e") == ["echo", "exit"]
+
+    def test_no_matching_builtin_returns_empty_list(self):
+        assert main.get_candidates("zz") == []
+
+    def test_prefix_equal_to_a_full_builtin_name_matches_it(self):
+        assert main.get_candidates("cd") == ["cd"]
+
+    def test_empty_prefix_returns_every_builtin(self):
+        assert main.get_candidates("") == main.BUILTINS
+
+
+# ---------------------------------------------------------------------------
+# Tab-completion for builtins: redraw / autocomplete
+# ---------------------------------------------------------------------------
+
+class TestRedraw:
+    def test_writes_clear_line_then_prompt_and_output(self, capsys):
+        main.redraw("echo")
+
+        assert capsys.readouterr().out == "\r\033[2K$ echo"
+
+    def test_writes_bare_prompt_for_empty_output(self, capsys):
+        main.redraw("")
+
+        assert capsys.readouterr().out == "\r\033[2K$ "
+
+
+class TestAutocomplete:
+    def test_unique_prefix_completes_in_place(self, capsys):
+        buffer = list("ech")
+
+        result = main.autocomplete(buffer)
+
+        assert result == ["echo"]
+        assert buffer == ["echo"]
+
+    def test_shared_prefix_completes_to_the_first_match_alphabetically(self, capsys):
+        buffer = list("e")
+
+        result = main.autocomplete(buffer)
+
+        assert result == ["echo"]
+
+    def test_completion_redraws_the_line_with_the_full_word(self, capsys):
+        buffer = list("ech")
+
+        main.autocomplete(buffer)
+
+        assert capsys.readouterr().out == "\r\033[2K$ echo"
+
+    def test_no_match_rings_the_bell(self, capsys):
+        buffer = list("zzz")
+
+        main.autocomplete(buffer)
+
+        assert capsys.readouterr().out == "\x07"
+
+    def test_no_match_leaves_the_buffer_unchanged(self, capsys):
+        buffer = list("zzz")
+
+        result = main.autocomplete(buffer)
+
+        assert result == list("zzz")
+        assert buffer == list("zzz")
+
+    def test_no_match_does_not_redraw_the_line(self, capsys):
+        buffer = list("zzz")
+
+        main.autocomplete(buffer)
+
+        assert "\033[2K" not in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
 class TestMain:
     def test_exits_immediately_on_exit_command(self, monkeypatch, capsys):
-        monkeypatch.setattr("builtins.input", lambda: "exit")
+        monkeypatch.setattr(main, "line_editor", lambda: "exit")
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
@@ -1046,7 +1144,7 @@ class TestMain:
 
     def test_processes_commands_until_exit(self, monkeypatch, capsys):
         inputs = iter(["echo hi", "type ls", "exit"])
-        monkeypatch.setattr("builtins.input", lambda: next(inputs))
+        monkeypatch.setattr(main, "line_editor", lambda: next(inputs))
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
@@ -1058,7 +1156,7 @@ class TestMain:
 
     def test_collapses_repeated_whitespace_between_args(self, monkeypatch):
         inputs = iter(["echo    hi     there", "exit"])
-        monkeypatch.setattr("builtins.input", lambda: next(inputs))
+        monkeypatch.setattr(main, "line_editor", lambda: next(inputs))
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
@@ -1074,7 +1172,7 @@ class TestMain:
         # returns no tokens, and parse() only reads tokens[0] inside the loop
         # guard, so an empty line now parses to an empty, harmless command.
         inputs = iter(["", "exit"])
-        monkeypatch.setattr("builtins.input", lambda: next(inputs))
+        monkeypatch.setattr(main, "line_editor", lambda: next(inputs))
         calls = []
         monkeypatch.setattr(
             main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))

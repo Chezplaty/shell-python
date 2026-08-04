@@ -9,9 +9,12 @@ treat the shell as a black box: they never import app.main.
 """
 
 import os
+import pty
+import select
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -24,26 +27,118 @@ def make_executable(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 
+PROMPT = "$ "
+
+
+class _PtyShell:
+    """
+    Drives app.main over a pseudo-terminal, one line at a time, only writing
+    the next line once the shell's prompt has reappeared.
+
+    main.py's line editor puts stdin into cbreak mode via tty.setcbreak(fd)
+    (and later restores it via termios.tcsetattr), both using TCSAFLUSH -
+    which discards any input sitting unread in the terminal's buffer at that
+    exact moment. Writing every line up front races those flushes and
+    silently loses whatever hadn't been read yet, so instead each line is
+    held back until the shell has actually finished reading and processing
+    the previous one.
+    """
+
+    def __init__(self, cwd: Path, env: dict | None, timeout: float):
+        run_env = {**(env if env is not None else os.environ)}
+        run_env["PYTHONPATH"] = str(REPO_ROOT)
+
+        self.master_fd, slave_fd = pty.openpty()
+        self.proc = subprocess.Popen(
+            [sys.executable, "-m", "app.main"],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            cwd=cwd,
+            env=run_env,
+        )
+        os.close(slave_fd)
+
+        self.output = b""
+        self.deadline = time.monotonic() + timeout
+
+    def _read_more(self) -> bool:
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"timed out; output so far: {self.output!r}")
+
+        ready, _, _ = select.select([self.master_fd], [], [], remaining)
+        if not ready:
+            return True
+
+        try:
+            chunk = os.read(self.master_fd, 4096)
+        except OSError:
+            return False
+        if not chunk:
+            return False
+
+        self.output += chunk
+        return True
+
+    def wait_for_prompt(self) -> bool:
+        """Blocks until output *newly arrived since this call started* ends with the prompt."""
+        baseline = len(self.output)
+        while len(self.output) <= baseline or not self.output[baseline:].decode(errors="replace").endswith(PROMPT):
+            if not self._read_more():
+                return False
+        return True
+
+    def send_line(self, line: str) -> None:
+        # main.py's line editor calls tty.setcbreak(fd) (TCSAFLUSH) once per
+        # line, right after printing "$ " but before it starts reading. That
+        # call discards any input that arrived before it runs, so writing
+        # the instant the prompt is observed races it: verified empirically
+        # to fail intermittently with no delay, and to succeed reliably
+        # (15/15 trials) with this one.
+        time.sleep(0.01)
+        os.write(self.master_fd, (line + "\n").encode())
+
+    def drain(self) -> None:
+        while self._read_more():
+            pass
+        self.proc.wait(timeout=max(self.deadline - time.monotonic(), 0.1))
+
+    def close(self) -> None:
+        # Belt-and-suspenders: if the process is still alive here (a timeout,
+        # an assertion error mid-test, anything that skipped drain()'s clean
+        # wait), kill it outright. Closing master_fd alone sends the child's
+        # stdin to EOF, but main.py's line_editor() doesn't check for EOF on
+        # read() - it spins in a tight loop appending "" forever instead of
+        # exiting, which leaks a 100%-CPU orphan process if we don't kill it.
+        if self.proc.poll() is None:
+            self.proc.kill()
+            self.proc.wait(timeout=5)
+        os.close(self.master_fd)
+
+
 def run_shell(commands: list[str], cwd: Path = REPO_ROOT, env: dict | None = None, timeout: float = 10):
     """
     Runs the shell as a subprocess, feeding it `commands` one per line
     (a trailing "exit" is required to terminate the REPL), and returns
     (stdout, returncode).
     """
-    stdin_text = "\n".join(commands) + "\n"
-    run_env = {**(env if env is not None else os.environ)}
-    run_env["PYTHONPATH"] = str(REPO_ROOT)
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "app.main"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        cwd=cwd,
-        env=run_env,
-    )
-    out, _ = proc.communicate(stdin_text, timeout=timeout)
-    return out, proc.returncode
+    shell = _PtyShell(cwd, env, timeout)
+    try:
+        for command in commands:
+            if not shell.wait_for_prompt():
+                break
+            shell.send_line(command)
+        shell.drain()
+        # The pty's line discipline translates outgoing "\n" to "\r\n" (normal
+        # terminal output processing), which isn't something the shell itself
+        # is doing. Undo it so assertions can keep comparing against plain
+        # "\n" as before. This leaves bare "\r" (e.g. the tab-completion
+        # redraw's "\r\033[2K" cursor reset) untouched.
+        out = shell.output.decode(errors="replace").replace("\r\n", "\n")
+        return out, shell.proc.returncode
+    finally:
+        shell.close()
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +154,10 @@ class TestPwdBuiltin:
     def test_pwd_prints_current_working_directory(self, tmp_path):
         out, _ = run_shell(["pwd", "exit"], cwd=tmp_path)
 
-        assert f"$ {tmp_path}\n" in out
+        # The prompt is followed by the echoed "pwd" command text before
+        # pwd's own printed output, so the path no longer immediately
+        # follows "$ " the way it would with silent (non-echoing) input.
+        assert f"\n{tmp_path}\n" in out
 
 
 # ---------------------------------------------------------------------------
@@ -78,14 +176,14 @@ class TestCdBuiltin:
 
         out, _ = run_shell([f"cd {target}", "pwd", "exit"], cwd=tmp_path)
 
-        assert f"$ {target}\n" in out
+        assert f"\n{target}\n" in out
 
     def test_cd_to_relative_path_changes_directory(self, tmp_path):
         (tmp_path / "nested").mkdir()
 
         out, _ = run_shell(["cd nested", "pwd", "exit"], cwd=tmp_path)
 
-        assert f"$ {tmp_path / 'nested'}\n" in out
+        assert f"\n{tmp_path / 'nested'}\n" in out
 
     def test_cd_to_parent_directory_with_dotdot(self, tmp_path):
         nested = tmp_path / "nested"
@@ -93,7 +191,7 @@ class TestCdBuiltin:
 
         out, _ = run_shell(["cd ..", "pwd", "exit"], cwd=nested)
 
-        assert f"$ {tmp_path}\n" in out
+        assert f"\n{tmp_path}\n" in out
 
     def test_cd_nonexistent_path_prints_error(self, tmp_path):
         missing = tmp_path / "does_not_exist"
@@ -137,7 +235,7 @@ class TestCdBuiltin:
 
         out, _ = run_shell(["cd ~", "pwd", "exit"], cwd=tmp_path, env=env)
 
-        assert f"$ {home}\n" in out
+        assert f"\n{home}\n" in out
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +497,10 @@ class TestImplementExit:
         out, returncode = run_shell(["invalid_pear_command", "exit"], env=env)
 
         assert "invalid_pear_command: command not found\n" in out
-        assert out.endswith("$ ")
+        # main() breaks out of the loop as soon as "exit" is parsed, before
+        # printing another prompt, so the transcript ends with the echoed
+        # "exit" line rather than a bare "$ ".
+        assert out.endswith("$ exit\n")
         assert returncode == 0
 
 
@@ -442,7 +543,10 @@ class TestOutputRedirection:
         out, _ = run_shell([f"echo Hello James > {target}", "exit"], cwd=tmp_path)
 
         assert target.read_text() == "Hello James\n"
-        assert "Hello James" not in out
+        # "Hello James" is echoed as part of the typed command line itself
+        # (e.g. "echo Hello James > foo.md"), so check it doesn't ALSO show
+        # up as echo's own printed result on its own line.
+        assert "\nHello James\n" not in out
 
     def test_1gt_behaves_identically_to_gt(self, tmp_path):
         target = tmp_path / "foo.md"
@@ -450,7 +554,7 @@ class TestOutputRedirection:
         out, _ = run_shell([f"echo Hello James 1> {target}", "exit"], cwd=tmp_path)
 
         assert target.read_text() == "Hello James\n"
-        assert "Hello James" not in out
+        assert "\nHello James\n" not in out
 
     def test_creates_the_target_file_when_it_does_not_exist(self, tmp_path):
         target = tmp_path / "new_file.md"
@@ -514,8 +618,8 @@ class TestAppendStdoutRedirection:
         )
 
         assert target.read_text() == "Hello Emily\nHello Maria\n"
-        assert "Hello Emily" not in out
-        assert "Hello Maria" not in out
+        assert "\nHello Emily\n" not in out
+        assert "\nHello Maria\n" not in out
 
     def test_gtgt_appends_after_content_written_by_a_prior_overwrite_redirect(self, tmp_path):
         target = tmp_path / "qux.md"
@@ -642,5 +746,36 @@ class TestPrintPrompt:
     def test_prints_prompt_before_reading_input(self):
         out, returncode = run_shell(["exit"])
 
-        assert out == "$ "
+        # "exit" itself is echoed back by the line editor, so the transcript
+        # is the prompt followed by the echoed command, not a bare "$ ".
+        assert out == "$ exit\n"
+        assert returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# Tab autocompletion for builtins
+# ---------------------------------------------------------------------------
+
+class TestTabAutocompletion:
+    def test_tab_completes_a_unique_prefix_and_runs_the_completed_command(self):
+        # Types "ec", presses Tab (completing to "echo"), then types " hi"
+        # and Enter - so the executed command is "echo hi", not "ec hi".
+        out, _ = run_shell(["ec\t hi", "exit"])
+
+        assert "\033[2K$ echo" in out
+        assert "hi\n" in out
+        assert "\x07" not in out
+
+    def test_tab_with_no_matching_builtin_rings_the_bell_and_leaves_the_buffer_untouched(self):
+        out, _ = run_shell(["zzzcmd\t", "exit"])
+
+        assert "\x07" in out
+        assert "zzzcmd: command not found\n" in out
+
+    def test_tab_with_multiple_matches_completes_to_the_first_match_alphabetically(self):
+        # Both "echo" and "exit" start with "e"; get_candidates returns them
+        # sorted, so Tab should complete to "echo" (not "exit").
+        out, returncode = run_shell(["e\t", "exit"])
+
+        assert "\033[2K$ echo" in out
         assert returncode == 0

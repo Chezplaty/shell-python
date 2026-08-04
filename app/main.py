@@ -9,7 +9,55 @@ from app.parser import parse
 
 from app.shell_builtins import BUILTINS
 
+BUILTINS = sorted(BUILTINS)
+
+#TODO: replace with bisect later
+def find_insertion_point(prefix: str):
+    l, r = 0, len(BUILTINS)
+
+    while l < r:
+        mid = (l + r) // 2
+
+        if BUILTINS[mid] < prefix:
+            l = mid + 1
+        else:
+            r = mid 
+
+    return l
+
+def get_candidates(prefix: str) -> list[str]:
+
+    start = find_insertion_point(prefix)
+    candidates = []
+
+    while start < len(BUILTINS) and BUILTINS[start].startswith(prefix):
+        candidates.append(BUILTINS[start])
+        start += 1
+
+    return candidates
+
+def redraw(output: str) -> None:
+
+    sys.stdout.write("\r\033[2K") #clear line
+    sys.stdout.write(f"$ {output}")
+    sys.stdout.flush()
+
+def autocomplete(buffer: list[str]) -> list[str]:
+
+    candidates = get_candidates("".join(buffer))
+
+    if candidates:
+        buffer.clear()
+        buffer.append(candidates[0])
+        redraw(candidates[0])
+    else:
+        sys.stdout.write('\x07') #bell sound
+        sys.stdout.flush()
+
+    return buffer
+
 def line_editor():
+    #TODO: turn into context manager
     fd = sys.stdin.fileno()
     old_settings = tty.setcbreak(fd)
     buffer = []
@@ -17,33 +65,20 @@ def line_editor():
         
         while True:
 
-            char = sys.stdin.read(1)#read one character at a time
+            char = sys.stdin.read(1) #read one character at a time
 
             sys.stdout.write(char)
             sys.stdout.flush()
-
 
             if char == '\n':
                 return "".join(buffer)
 
             #tab character
             if char == '\t':
-                #autocomplete function
-                word = "".join(buffer)
-                #search for prefix
-                candidates = []
-                for candidate in BUILTINS.keys():
-                    if candidate.startswith(word):
-                        candidates.append(candidate)
+                buffer = autocomplete(buffer)
+                continue
 
-                if candidates:
-                    sys.stdout.write("\r\033[2K")
-                    sys.stdout.write(f"$ {candidates[0]}")
-                    sys.stdout.flush()
-                    buffer.clear()
-                    buffer.append(candidates[0])
-            else:
-                buffer.append(char)
+            buffer.append(char)
                     
     finally:
         termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
@@ -58,8 +93,6 @@ def main():
     while True:
         sys.stdout.write("$ ")
         sys.stdout.flush()
-
-        #TODO: implement tab autocompletion
 
         #line = input()
 

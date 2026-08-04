@@ -74,7 +74,7 @@ def redirected_fds(files: dict[int, IO]) -> Generator[None]:
 
     try:
         for fd, file in files.items():
-            #make fd point to same place file's fd points to
+            #make fd for stdout or stderr point to same place file's fd points to
             os.dup2(file.fileno(), fd)
         yield
     finally:

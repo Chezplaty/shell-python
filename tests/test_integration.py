@@ -780,6 +780,21 @@ class TestTabAutocompletion:
         assert "\033[2K$ echo" in out
         assert returncode == 0
 
+    def test_tab_cycles_through_multiple_matches_and_wraps_around(self):
+        # Types "e" then presses Tab three times: "echo" and "exit" are the
+        # only matches, so the cycle goes echo -> exit -> back to echo.
+        out, returncode = run_shell(["e\t\t\t", "exit"])
+
+        echo_redraw = "\033[2K$ echo"
+        exit_redraw = "\033[2K$ exit"
+        first_echo = out.find(echo_redraw)
+        exit_at = out.find(exit_redraw)
+        second_echo = out.find(echo_redraw, first_echo + 1)
+
+        assert -1 not in (first_echo, exit_at, second_echo)
+        assert first_echo < exit_at < second_echo
+        assert returncode == 0
+
 
 # ---------------------------------------------------------------------------
 # Backspace editing

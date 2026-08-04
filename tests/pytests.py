@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app import executor, main, path_utils, shell_builtins
+from app import executor, line_editor, main, path_utils, shell_builtins
 from app.errors import BuiltinError
 from app.lexer import Lexer, LexState, TokenType, finish_token
 from app.parser import Instruction, Redirect
@@ -1033,34 +1033,34 @@ class TestTokenize:
 
 class TestFindInsertionPoint:
     def test_returns_index_of_matching_builtin(self):
-        assert main.find_insertion_point("echo") == main.BUILTINS.index("echo")
+        assert line_editor.find_insertion_point("echo") == line_editor.BUILTINS.index("echo")
 
     def test_returns_index_where_a_missing_prefix_would_be_inserted(self):
         # "ex" sorts between "echo" and "exit" in the builtin list.
-        assert main.find_insertion_point("ex") == main.BUILTINS.index("exit")
+        assert line_editor.find_insertion_point("ex") == line_editor.BUILTINS.index("exit")
 
     def test_empty_prefix_returns_zero(self):
-        assert main.find_insertion_point("") == 0
+        assert line_editor.find_insertion_point("") == 0
 
     def test_prefix_sorting_after_every_builtin_returns_list_length(self):
-        assert main.find_insertion_point("zzz") == len(main.BUILTINS)
+        assert line_editor.find_insertion_point("zzz") == len(line_editor.BUILTINS)
 
 
 class TestGetCandidates:
     def test_unique_prefix_returns_single_match(self):
-        assert main.get_candidates("ech") == ["echo"]
+        assert line_editor.get_candidates("ech") == ["echo"]
 
     def test_shared_prefix_returns_all_matches_in_sorted_order(self):
-        assert main.get_candidates("e") == ["echo", "exit"]
+        assert line_editor.get_candidates("e") == ["echo", "exit"]
 
     def test_no_matching_builtin_returns_empty_list(self):
-        assert main.get_candidates("zz") == []
+        assert line_editor.get_candidates("zz") == []
 
     def test_prefix_equal_to_a_full_builtin_name_matches_it(self):
-        assert main.get_candidates("cd") == ["cd"]
+        assert line_editor.get_candidates("cd") == ["cd"]
 
     def test_empty_prefix_returns_every_builtin(self):
-        assert main.get_candidates("") == main.BUILTINS
+        assert line_editor.get_candidates("") == line_editor.BUILTINS
 
 
 # ---------------------------------------------------------------------------
@@ -1069,12 +1069,12 @@ class TestGetCandidates:
 
 class TestRedraw:
     def test_writes_clear_line_then_prompt_and_output(self, capsys):
-        main.redraw("echo")
+        line_editor.redraw("echo")
 
         assert capsys.readouterr().out == "\r\033[2K$ echo"
 
     def test_writes_bare_prompt_for_empty_output(self, capsys):
-        main.redraw("")
+        line_editor.redraw("")
 
         assert capsys.readouterr().out == "\r\033[2K$ "
 
@@ -1083,7 +1083,7 @@ class TestAutocomplete:
     def test_unique_prefix_completes_in_place(self, capsys):
         buffer = list("ech")
 
-        result = main.autocomplete(buffer)
+        result = line_editor.autocomplete(buffer)
 
         assert result == ["echo"]
         assert buffer == ["echo"]
@@ -1091,28 +1091,28 @@ class TestAutocomplete:
     def test_shared_prefix_completes_to_the_first_match_alphabetically(self, capsys):
         buffer = list("e")
 
-        result = main.autocomplete(buffer)
+        result = line_editor.autocomplete(buffer)
 
         assert result == ["echo"]
 
     def test_completion_redraws_the_line_with_the_full_word(self, capsys):
         buffer = list("ech")
 
-        main.autocomplete(buffer)
+        line_editor.autocomplete(buffer)
 
         assert capsys.readouterr().out == "\r\033[2K$ echo"
 
     def test_no_match_rings_the_bell(self, capsys):
         buffer = list("zzz")
 
-        main.autocomplete(buffer)
+        line_editor.autocomplete(buffer)
 
         assert capsys.readouterr().out == "\x07"
 
     def test_no_match_leaves_the_buffer_unchanged(self, capsys):
         buffer = list("zzz")
 
-        result = main.autocomplete(buffer)
+        result = line_editor.autocomplete(buffer)
 
         assert result == list("zzz")
         assert buffer == list("zzz")
@@ -1120,7 +1120,7 @@ class TestAutocomplete:
     def test_no_match_does_not_redraw_the_line(self, capsys):
         buffer = list("zzz")
 
-        main.autocomplete(buffer)
+        line_editor.autocomplete(buffer)
 
         assert "\033[2K" not in capsys.readouterr().out
 

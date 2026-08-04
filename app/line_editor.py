@@ -1,0 +1,96 @@
+import sys
+import tty
+import termios
+
+from app.shell_builtins import BUILTINS
+
+BUILTINS = sorted(BUILTINS)
+
+#TODO: replace with bisect later
+def find_insertion_point(prefix: str) -> int:
+    """
+    Finds the index where a prefix should be inserted in a sorted list.
+    Returns the first index containing a value greater than or equal to the prefix.
+    """
+
+    l, r = 0, len(BUILTINS)
+
+    while l < r:
+        mid = (l + r) // 2
+
+        if BUILTINS[mid] < prefix:
+            l = mid + 1
+        else:
+            r = mid
+
+    return l
+
+def get_candidates(prefix: str) -> list[str]:
+    """
+    Finds all sorted entries that begin with the given prefix.
+    Returns a list of possible autocomplete matches.
+    """
+
+    start = find_insertion_point(prefix)
+    candidates = []
+
+    while start < len(BUILTINS) and BUILTINS[start].startswith(prefix):
+        candidates.append(BUILTINS[start])
+        start += 1
+
+    return candidates
+
+def redraw(output: str) -> None:
+    """
+    Clears the current terminal line and redraws the shell prompt.
+    Displays the provided output after the prompt symbol.
+    """
+
+    sys.stdout.write("\r\033[2K") #clear line
+    sys.stdout.write(f"$ {output}")
+    sys.stdout.flush()
+
+def autocomplete(buffer: list[str]) -> list[str]:
+    """
+    Replaces the current buffer with the first matching completion.
+    Emits a terminal bell when no completion candidates are found.
+    """
+
+    candidates = get_candidates("".join(buffer))
+
+    if candidates:
+        buffer.clear()
+        buffer.append(candidates[0])
+        redraw(candidates[0])
+    else:
+        sys.stdout.write('\x07') #bell sound
+        sys.stdout.flush()
+
+    return buffer
+
+def line_editor():
+    #TODO: turn into context manager
+    fd = sys.stdin.fileno()
+    old_settings = tty.setcbreak(fd)
+    buffer = []
+    try:
+
+        while True:
+
+            char = sys.stdin.read(1) #read one character at a time
+
+            sys.stdout.write(char)
+            sys.stdout.flush()
+
+            if char == '\n':
+                return "".join(buffer)
+
+            #tab character
+            if char == '\t':
+                buffer = autocomplete(buffer)
+                continue
+
+            buffer.append(char)
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)

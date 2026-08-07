@@ -1,11 +1,8 @@
 import sys
-import tty
-import termios
+import os
+from pathlib import Path
 
 from app.shell_builtins import BUILTINS
-
-BUILTINS = sorted(BUILTINS)
-
 
 class CandidateCursor:
 
@@ -18,36 +15,53 @@ class CandidateCursor:
         self.index = (self.index + 1) % len(self.candidates) #wrap around
         return candidate
 
+def compile_choices() -> list[str]:
+    """
+    Builds a sorted list of command names available for autocompletion.
+    Combines executables from PATH with the shell's builtin commands.
+    """
+    choices = set()
+    for directory in map(Path, os.get_exec_path()): #splits directories in PATH var
+        try:
+            for entry in directory.iterdir():
+                if entry.is_file() and os.access(entry, os.X_OK):
+                    choices.add(entry.name)
+        except OSError: #skip unreadable directories/files
+            pass
+
+    choices.update(BUILTINS) #add builtins
+    return sorted(choices)
+
 #TODO: replace with bisect later
-def find_insertion_point(prefix: str) -> int:
+def find_insertion_point(choices: list[str], prefix: str) -> int:
     """
     Finds the index where a prefix should be inserted in a sorted list.
     Returns the first index containing a value greater than or equal to the prefix.
     """
 
-    l, r = 0, len(BUILTINS)
+    l, r = 0, len(choices)
 
     while l < r:
         mid = (l + r) // 2
 
-        if BUILTINS[mid] < prefix:
+        if choices[mid] < prefix:
             l = mid + 1
         else:
             r = mid
 
     return l
 
-def get_candidates(prefix: str) -> list[str]:
+def get_candidates(choices: list[str], prefix: str) -> list[str]:
     """
     Finds all sorted entries that begin with the given prefix.
     Returns a list of possible autocomplete matches.
     """
 
-    start = find_insertion_point(prefix)
+    start = find_insertion_point(choices, prefix)
     candidates = []
 
-    while start < len(BUILTINS) and BUILTINS[start].startswith(prefix):
-        candidates.append(BUILTINS[start])
+    while start < len(choices) and choices[start].startswith(prefix):
+        candidates.append(choices[start])
         start += 1
 
     return candidates
@@ -69,9 +83,10 @@ def bell() -> None:
 
 class LineEditor:
 
-    def __init__(self):
+    def __init__(self, choices: list[str]):
         self.buffer = []
         self.tab_cursor = None
+        self.choices = choices
 
     def run(self) -> str:
         while True:
@@ -103,7 +118,7 @@ class LineEditor:
             return
         
         if self.tab_cursor is None:
-            candidates = get_candidates(prefix)
+            candidates = get_candidates(self.choices, prefix)
             if candidates:
                 self.tab_cursor = CandidateCursor(candidates)
             else: #no candidates found

@@ -3,7 +3,7 @@ import sys
 from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
 from app.lexer import Lexer
-from app.line_editor import LineEditor
+from app.line_editor import LineEditor, compile_choices
 from app.parser import parse
 
 from contextlib import contextmanager
@@ -30,6 +30,7 @@ def main():
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
+    choices = compile_choices()
 
     while True:
         with set_cbreak_mode():
@@ -37,7 +38,7 @@ def main():
             sys.stdout.write("$ ")
             sys.stdout.flush()
 
-            line = LineEditor().run()
+            line = LineEditor(choices).run()
         #restore on exit
 
         if not line.strip(): 

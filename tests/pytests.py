@@ -1028,39 +1028,121 @@ class TestTokenize:
 
 
 # ---------------------------------------------------------------------------
+# compile_choices
+# ---------------------------------------------------------------------------
+
+class TestCompileChoices:
+    def test_includes_every_builtin(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("PATH", str(tmp_path))
+
+        choices = line_editor.compile_choices()
+
+        assert set(shell_builtins.BUILTINS) <= set(choices)
+
+    def test_custom_executable_on_path_is_included(self, tmp_path, monkeypatch):
+        make_executable(tmp_path / "my_custom_exe_1234")
+        monkeypatch.setenv("PATH", str(tmp_path))
+
+        choices = line_editor.compile_choices()
+
+        assert "my_custom_exe_1234" in choices
+
+    def test_non_executable_file_on_path_is_excluded(self, tmp_path, monkeypatch):
+        non_exec = tmp_path / "not_executable_file"
+        non_exec.write_text("not executable")
+        non_exec.chmod(stat.S_IREAD)
+        monkeypatch.setenv("PATH", str(tmp_path))
+
+        choices = line_editor.compile_choices()
+
+        assert "not_executable_file" not in choices
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses directory permission checks")
+    def test_unreadable_directory_on_path_is_skipped(self, tmp_path, monkeypatch):
+        locked_dir = tmp_path / "locked"
+        locked_dir.mkdir()
+        make_executable(locked_dir / "hidden_exe")
+        locked_dir.chmod(0)
+        readable_dir = tmp_path / "readable"
+        readable_dir.mkdir()
+        make_executable(readable_dir / "visible_exe")
+        monkeypatch.setenv("PATH", os.pathsep.join([str(locked_dir), str(readable_dir)]))
+
+        try:
+            choices = line_editor.compile_choices()
+        finally:
+            locked_dir.chmod(0o700)
+
+        assert "hidden_exe" not in choices
+        assert "visible_exe" in choices
+
+    def test_finds_an_existing_uncommon_executable_on_the_real_path(self):
+        # cksum is a POSIX-standard utility present on both macOS and Linux
+        # but rarely used, so its presence here confirms compile_choices is
+        # actually scanning the real PATH rather than only builtins.
+        choices = line_editor.compile_choices()
+
+        assert "cksum" in choices
+
+    def test_duplicate_executable_names_across_directories_are_deduplicated(self, tmp_path, monkeypatch):
+        first_dir, second_dir = tmp_path / "first", tmp_path / "second"
+        first_dir.mkdir()
+        second_dir.mkdir()
+        make_executable(first_dir / "shared_exe")
+        make_executable(second_dir / "shared_exe")
+        monkeypatch.setenv("PATH", os.pathsep.join([str(first_dir), str(second_dir)]))
+
+        choices = line_editor.compile_choices()
+
+        assert choices.count("shared_exe") == 1
+
+    def test_result_is_sorted(self, tmp_path, monkeypatch):
+        make_executable(tmp_path / "zeta_exe")
+        make_executable(tmp_path / "alpha_exe")
+        monkeypatch.setenv("PATH", str(tmp_path))
+
+        choices = line_editor.compile_choices()
+
+        assert choices == sorted(choices)
+
+
+# ---------------------------------------------------------------------------
 # Tab-completion for builtins: find_insertion_point / get_candidates
 # ---------------------------------------------------------------------------
 
+BUILTIN_CHOICES = sorted(shell_builtins.BUILTINS)
+
+
 class TestFindInsertionPoint:
     def test_returns_index_of_matching_builtin(self):
-        assert line_editor.find_insertion_point("echo") == line_editor.BUILTINS.index("echo")
+        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "echo") == BUILTIN_CHOICES.index("echo")
 
     def test_returns_index_where_a_missing_prefix_would_be_inserted(self):
         # "ex" sorts between "echo" and "exit" in the builtin list.
-        assert line_editor.find_insertion_point("ex") == line_editor.BUILTINS.index("exit")
+        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "ex") == BUILTIN_CHOICES.index("exit")
 
     def test_empty_prefix_returns_zero(self):
-        assert line_editor.find_insertion_point("") == 0
+        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "") == 0
 
     def test_prefix_sorting_after_every_builtin_returns_list_length(self):
-        assert line_editor.find_insertion_point("zzz") == len(line_editor.BUILTINS)
+        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "zzz") == len(BUILTIN_CHOICES)
 
 
 class TestGetCandidates:
     def test_unique_prefix_returns_single_match(self):
-        assert line_editor.get_candidates("ech") == ["echo"]
+        assert line_editor.get_candidates(BUILTIN_CHOICES, "ech") == ["echo"]
 
     def test_shared_prefix_returns_all_matches_in_sorted_order(self):
-        assert line_editor.get_candidates("e") == ["echo", "exit"]
+        assert line_editor.get_candidates(BUILTIN_CHOICES, "e") == ["echo", "exit"]
 
     def test_no_matching_builtin_returns_empty_list(self):
-        assert line_editor.get_candidates("zz") == []
+        assert line_editor.get_candidates(BUILTIN_CHOICES, "zz") == []
 
     def test_prefix_equal_to_a_full_builtin_name_matches_it(self):
-        assert line_editor.get_candidates("cd") == ["cd"]
+        assert line_editor.get_candidates(BUILTIN_CHOICES, "cd") == ["cd"]
 
     def test_empty_prefix_returns_every_builtin(self):
-        assert line_editor.get_candidates("") == line_editor.BUILTINS
+        assert line_editor.get_candidates(BUILTIN_CHOICES, "") == BUILTIN_CHOICES
 
 
 # ---------------------------------------------------------------------------
@@ -1093,7 +1175,7 @@ class TestLineEditorBackspace:
     def _run_line_editor(self, monkeypatch, keys):
         monkeypatch.setattr(line_editor.sys, "stdin", self.FakeStdin(keys))
 
-        return line_editor.LineEditor().run()
+        return line_editor.LineEditor(BUILTIN_CHOICES).run()
 
     def test_backspace_removes_last_character_and_erases_it_on_screen(self, monkeypatch, capsys):
         result = self._run_line_editor(monkeypatch, ["a", "b", "\x7f", "\n"])
@@ -1112,7 +1194,7 @@ class TestLineEditorBackspace:
 
 class TestAutocomplete:
     def test_unique_prefix_completes_in_place(self, capsys):
-        editor = line_editor.LineEditor()
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("ech")
 
         editor.handle_tab()
@@ -1120,7 +1202,7 @@ class TestAutocomplete:
         assert editor.buffer == list("echo")
 
     def test_shared_prefix_completes_to_the_first_match_alphabetically(self, capsys):
-        editor = line_editor.LineEditor()
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("e")
 
         editor.handle_tab()
@@ -1128,7 +1210,7 @@ class TestAutocomplete:
         assert editor.buffer == list("echo")
 
     def test_completion_redraws_the_line_with_the_full_word(self, capsys):
-        editor = line_editor.LineEditor()
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("ech")
 
         editor.handle_tab()
@@ -1136,7 +1218,7 @@ class TestAutocomplete:
         assert capsys.readouterr().out == "\r\033[2K$ echo"
 
     def test_no_match_rings_the_bell(self, capsys):
-        editor = line_editor.LineEditor()
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("zzz")
 
         editor.handle_tab()
@@ -1144,7 +1226,7 @@ class TestAutocomplete:
         assert capsys.readouterr().out == "\x07"
 
     def test_no_match_leaves_the_buffer_unchanged(self, capsys):
-        editor = line_editor.LineEditor()
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("zzz")
 
         editor.handle_tab()
@@ -1152,7 +1234,7 @@ class TestAutocomplete:
         assert editor.buffer == list("zzz")
 
     def test_no_match_does_not_redraw_the_line(self, capsys):
-        editor = line_editor.LineEditor()
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("zzz")
 
         editor.handle_tab()
@@ -1176,8 +1258,12 @@ class TestMain:
         monkeypatch.setattr(main.sys, "stdin", self._FakeStdin())
         monkeypatch.setattr(main.tty, "setcbreak", lambda fd: None)
         monkeypatch.setattr(main.termios, "tcsetattr", lambda *args, **kwargs: None)
+        monkeypatch.setattr(main, "compile_choices", lambda: [])
 
         class FakeLineEditor:
+            def __init__(self, choices):
+                pass
+
             def run(self):
                 return next(inputs)
 

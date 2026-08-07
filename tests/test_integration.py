@@ -772,18 +772,26 @@ class TestTabAutocompletion:
         assert "\x07" in out
         assert "zzzcmd: command not found\n" in out
 
-    def test_tab_with_multiple_matches_completes_to_the_first_match_alphabetically(self):
+    def test_tab_with_multiple_matches_completes_to_the_first_match_alphabetically(self, tmp_path):
         # Both "echo" and "exit" start with "e"; get_candidates returns them
-        # sorted, so Tab should complete to "echo" (not "exit").
-        out, returncode = run_shell(["e\t", "exit"])
+        # sorted, so Tab should complete to "echo" (not "exit"). PATH is
+        # pinned to an empty directory so no other "e"-prefixed executable
+        # from the real PATH can interfere with the expected ordering.
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, returncode = run_shell(["e\t", "exit"], env=env)
 
         assert "\033[2K$ echo" in out
         assert returncode == 0
 
-    def test_tab_cycles_through_multiple_matches_and_wraps_around(self):
+    def test_tab_cycles_through_multiple_matches_and_wraps_around(self, tmp_path):
         # Types "e" then presses Tab three times: "echo" and "exit" are the
-        # only matches, so the cycle goes echo -> exit -> back to echo.
-        out, returncode = run_shell(["e\t\t\t", "exit"])
+        # only matches, so the cycle goes echo -> exit -> back to echo. PATH
+        # is pinned to an empty directory so only the builtins are
+        # candidates.
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, returncode = run_shell(["e\t\t\t", "exit"], env=env)
 
         echo_redraw = "\033[2K$ echo"
         exit_redraw = "\033[2K$ exit"
@@ -793,6 +801,23 @@ class TestTabAutocompletion:
 
         assert -1 not in (first_echo, exit_at, second_echo)
         assert first_echo < exit_at < second_echo
+        assert returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# Tab autocompletion for custom PATH executables (compile_choices)
+# ---------------------------------------------------------------------------
+
+class TestTabAutocompletionForPathExecutables:
+    def test_tab_completes_a_custom_executable_found_on_path(self, tmp_path):
+        bin_dir = tmp_path / "fox"
+        bin_dir.mkdir()
+        make_executable(bin_dir / "custom_exe_9492", "#!/bin/sh\necho hi\n")
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+        out, returncode = run_shell(["custom_exe_94\t", "exit"], env=env)
+
+        assert "\033[2K$ custom_exe_9492" in out
         assert returncode == 0
 
 

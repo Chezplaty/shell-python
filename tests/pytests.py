@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app import executor, line_editor, main, path_utils, shell_builtins
+from app import executor, line_editor, main, path_utils, shell_builtins, tab_completion
 from app.errors import BuiltinError
 from app.lexer import Lexer, LexState, TokenType, finish_token
 from app.parser import Instruction, Redirect
@@ -1035,7 +1035,7 @@ class TestCompileChoices:
     def test_includes_every_builtin(self, tmp_path, monkeypatch):
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        choices = line_editor.compile_choices()
+        choices = tab_completion.compile_choices()
 
         assert set(shell_builtins.BUILTINS) <= set(choices)
 
@@ -1043,7 +1043,7 @@ class TestCompileChoices:
         make_executable(tmp_path / "my_custom_exe_1234")
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        choices = line_editor.compile_choices()
+        choices = tab_completion.compile_choices()
 
         assert "my_custom_exe_1234" in choices
 
@@ -1053,7 +1053,7 @@ class TestCompileChoices:
         non_exec.chmod(stat.S_IREAD)
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        choices = line_editor.compile_choices()
+        choices = tab_completion.compile_choices()
 
         assert "not_executable_file" not in choices
 
@@ -1069,7 +1069,7 @@ class TestCompileChoices:
         monkeypatch.setenv("PATH", os.pathsep.join([str(locked_dir), str(readable_dir)]))
 
         try:
-            choices = line_editor.compile_choices()
+            choices = tab_completion.compile_choices()
         finally:
             locked_dir.chmod(0o700)
 
@@ -1080,7 +1080,7 @@ class TestCompileChoices:
         # cksum is a POSIX-standard utility present on both macOS and Linux
         # but rarely used, so its presence here confirms compile_choices is
         # actually scanning the real PATH rather than only builtins.
-        choices = line_editor.compile_choices()
+        choices = tab_completion.compile_choices()
 
         assert "cksum" in choices
 
@@ -1092,7 +1092,7 @@ class TestCompileChoices:
         make_executable(second_dir / "shared_exe")
         monkeypatch.setenv("PATH", os.pathsep.join([str(first_dir), str(second_dir)]))
 
-        choices = line_editor.compile_choices()
+        choices = tab_completion.compile_choices()
 
         assert choices.count("shared_exe") == 1
 
@@ -1101,7 +1101,7 @@ class TestCompileChoices:
         make_executable(tmp_path / "alpha_exe")
         monkeypatch.setenv("PATH", str(tmp_path))
 
-        choices = line_editor.compile_choices()
+        choices = tab_completion.compile_choices()
 
         assert choices == sorted(choices)
 
@@ -1115,34 +1115,34 @@ BUILTIN_CHOICES = sorted(shell_builtins.BUILTINS)
 
 class TestFindInsertionPoint:
     def test_returns_index_of_matching_builtin(self):
-        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "echo") == BUILTIN_CHOICES.index("echo")
+        assert tab_completion.find_insertion_point(BUILTIN_CHOICES, "echo") == BUILTIN_CHOICES.index("echo")
 
     def test_returns_index_where_a_missing_prefix_would_be_inserted(self):
         # "ex" sorts between "echo" and "exit" in the builtin list.
-        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "ex") == BUILTIN_CHOICES.index("exit")
+        assert tab_completion.find_insertion_point(BUILTIN_CHOICES, "ex") == BUILTIN_CHOICES.index("exit")
 
     def test_empty_prefix_returns_zero(self):
-        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "") == 0
+        assert tab_completion.find_insertion_point(BUILTIN_CHOICES, "") == 0
 
     def test_prefix_sorting_after_every_builtin_returns_list_length(self):
-        assert line_editor.find_insertion_point(BUILTIN_CHOICES, "zzz") == len(BUILTIN_CHOICES)
+        assert tab_completion.find_insertion_point(BUILTIN_CHOICES, "zzz") == len(BUILTIN_CHOICES)
 
 
 class TestGetCandidates:
     def test_unique_prefix_returns_single_match(self):
-        assert line_editor.get_candidates(BUILTIN_CHOICES, "ech") == ["echo"]
+        assert tab_completion.get_candidates(BUILTIN_CHOICES, "ech") == ["echo"]
 
     def test_shared_prefix_returns_all_matches_in_sorted_order(self):
-        assert line_editor.get_candidates(BUILTIN_CHOICES, "e") == ["echo", "exit"]
+        assert tab_completion.get_candidates(BUILTIN_CHOICES, "e") == ["echo", "exit"]
 
     def test_no_matching_builtin_returns_empty_list(self):
-        assert line_editor.get_candidates(BUILTIN_CHOICES, "zz") == []
+        assert tab_completion.get_candidates(BUILTIN_CHOICES, "zz") == []
 
     def test_prefix_equal_to_a_full_builtin_name_matches_it(self):
-        assert line_editor.get_candidates(BUILTIN_CHOICES, "cd") == ["cd"]
+        assert tab_completion.get_candidates(BUILTIN_CHOICES, "cd") == ["cd"]
 
     def test_empty_prefix_returns_every_builtin(self):
-        assert line_editor.get_candidates(BUILTIN_CHOICES, "") == BUILTIN_CHOICES
+        assert tab_completion.get_candidates(BUILTIN_CHOICES, "") == BUILTIN_CHOICES
 
 
 # ---------------------------------------------------------------------------

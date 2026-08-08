@@ -3,7 +3,8 @@ import sys
 from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
 from app.lexer import Lexer
-from app.line_editor import LineEditor, compile_choices
+from app.line_editor import LineEditor
+from app.tab_completion import compile_choices
 from app.parser import parse
 
 from contextlib import contextmanager

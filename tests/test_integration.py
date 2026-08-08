@@ -762,9 +762,10 @@ class TestTabAutocompletion:
         # and Enter - so the executed command is "echo hi", not "ec hi".
         out, _ = run_shell(["ec\t hi", "exit"])
 
-        assert "\033[2K$ echo" in out
+        # A unique match still bells (see handle_tab's cursor-creation
+        # branch) even though it completes immediately with no list shown.
+        assert "\x07\r\033[2K$ echo" in out
         assert "hi\n" in out
-        assert "\x07" not in out
 
     def test_tab_with_no_matching_builtin_rings_the_bell_and_leaves_the_buffer_untouched(self):
         out, _ = run_shell(["zzzcmd\t", "exit"])
@@ -772,26 +773,28 @@ class TestTabAutocompletion:
         assert "\x07" in out
         assert "zzzcmd: command not found\n" in out
 
-    def test_tab_with_multiple_matches_completes_to_the_first_match_alphabetically(self, tmp_path):
+    def test_tab_with_multiple_matches_shows_list_on_first_tab_then_completes_on_second(self, tmp_path):
         # Both "echo" and "exit" start with "e"; get_candidates returns them
-        # sorted, so Tab should complete to "echo" (not "exit"). PATH is
-        # pinned to an empty directory so no other "e"-prefixed executable
-        # from the real PATH can interfere with the expected ordering.
+        # sorted. The first Tab only lists the candidates (see
+        # TestTabCandidateList for that in detail); the second Tab is what
+        # completes to the first match alphabetically ("echo", not "exit").
+        # PATH is pinned to an empty directory so no other "e"-prefixed
+        # executable from the real PATH can interfere with the ordering.
         env = {**os.environ, "PATH": str(tmp_path)}
 
-        out, returncode = run_shell(["e\t", "exit"], env=env)
+        out, returncode = run_shell(["e\t\t", "exit"], env=env)
 
         assert "\033[2K$ echo" in out
         assert returncode == 0
 
     def test_tab_cycles_through_multiple_matches_and_wraps_around(self, tmp_path):
-        # Types "e" then presses Tab three times: "echo" and "exit" are the
-        # only matches, so the cycle goes echo -> exit -> back to echo. PATH
-        # is pinned to an empty directory so only the builtins are
-        # candidates.
+        # Types "e" then presses Tab four times: the first Tab only lists
+        # "echo"/"exit" without completing, so the completion cycle itself
+        # is echo -> exit -> back to echo across taps 2-4. PATH is pinned to
+        # an empty directory so only the builtins are candidates.
         env = {**os.environ, "PATH": str(tmp_path)}
 
-        out, returncode = run_shell(["e\t\t\t", "exit"], env=env)
+        out, returncode = run_shell(["e\t\t\t\t", "exit"], env=env)
 
         echo_redraw = "\033[2K$ echo"
         exit_redraw = "\033[2K$ exit"
@@ -820,6 +823,31 @@ class TestTabAutocompletionForPathExecutables:
         assert "\033[2K$ custom_exe_9492" in out
         assert returncode == 0
 
+
+# ---------------------------------------------------------------------------
+# Tab autocompletion: candidate list display/clear for multiple matches
+# ---------------------------------------------------------------------------
+
+class TestTabCandidateList:
+    def test_first_tab_lists_candidates_second_tab_completes_and_clears_the_list(self, tmp_path):
+        # "e" matches only "echo" and "exit" among the builtins; PATH is
+        # pinned to an empty directory so no external executable can add a
+        # third match and change the list or its layout.
+        env = {**os.environ, "PATH": str(tmp_path)}
+
+        out, returncode = run_shell(["e\t\t", "exit"], env=env)
+
+        # First Tab: bell, then the candidate list is printed on the line
+        # below the prompt, and the cursor is walked back up to the column
+        # it was at (column 4: "$ " + "e" + 1).
+        assert "$ e\x07\n\recho  exit\033[1A\033[4G" in out
+        # Second Tab: the buffer completes to the first candidate in place -
+        # the list is left on screen rather than cleared here.
+        assert "\r\033[2K$ echo" in out
+        # Enter: the still-displayed candidate line is erased (move down,
+        # clear, move back up) before the completed "echo" command runs.
+        assert "\033[B\033[2K\033[1A\r" in out
+        assert returncode == 0
 
 # ---------------------------------------------------------------------------
 # Backspace editing

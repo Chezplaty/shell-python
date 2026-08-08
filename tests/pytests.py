@@ -1180,15 +1180,15 @@ class TestLineEditorBackspace:
     def test_backspace_removes_last_character_and_erases_it_on_screen(self, monkeypatch, capsys):
         result = self._run_line_editor(monkeypatch, ["a", "b", "\x7f", "\n"])
 
-        # '\n' is appended to the buffer like any other key (see add_key), so
-        # it's included both in the returned line and in the echoed output.
-        assert result == "a\n"
+        # '\n' is written straight to the terminal but never added to the
+        # buffer (see run()), so it's echoed but not part of the returned line.
+        assert result == "a"
         assert capsys.readouterr().out == "ab\b \b\n"
 
     def test_backspace_on_empty_buffer_is_a_no_op(self, monkeypatch, capsys):
         result = self._run_line_editor(monkeypatch, ["\x7f", "a", "\n"])
 
-        assert result == "a\n"
+        assert result == "a"
         assert "\b \b" not in capsys.readouterr().out
 
 
@@ -1201,10 +1201,20 @@ class TestAutocomplete:
 
         assert editor.buffer == list("echo")
 
-    def test_shared_prefix_completes_to_the_first_match_alphabetically(self, capsys):
+    def test_shared_prefix_first_tab_shows_the_list_without_completing(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("e")
 
+        editor.handle_tab()
+
+        assert editor.buffer == list("e")
+        assert editor.candidate_lines > 0
+
+    def test_shared_prefix_second_tab_completes_to_the_first_match_alphabetically(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("e")
+
+        editor.handle_tab()
         editor.handle_tab()
 
         assert editor.buffer == list("echo")
@@ -1215,7 +1225,9 @@ class TestAutocomplete:
 
         editor.handle_tab()
 
-        assert capsys.readouterr().out == "\r\033[2K$ echo"
+        # A unique prefix still bells (see handle_tab's cursor-creation
+        # branch) before completing in place on the very first tab.
+        assert capsys.readouterr().out == "\x07\r\033[2K$ echo"
 
     def test_no_match_rings_the_bell(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
@@ -1240,6 +1252,95 @@ class TestAutocomplete:
         editor.handle_tab()
 
         assert "\033[2K" not in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# LineEditor.display_candidates / clear_candidates
+# ---------------------------------------------------------------------------
+
+class TestDisplayCandidates:
+    def test_writes_each_line_below_the_prompt(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+
+        editor.display_candidates(["echo", "exit"])
+
+        assert capsys.readouterr().out.startswith("\n\recho\n\rexit")
+
+    def test_moves_cursor_up_by_the_number_of_lines_shown(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+
+        editor.display_candidates(["echo", "exit", "export"])
+
+        assert "\033[3A" in capsys.readouterr().out
+
+    def test_restores_the_column_the_cursor_was_at_before_tab_was_pressed(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("ec")  # "$ " (2 cols) + "ec" -> column 5
+
+        editor.display_candidates(["echo", "exit"])
+
+        assert capsys.readouterr().out == "\n\recho\n\rexit\033[2A\033[5G"
+
+    def test_column_grows_with_the_buffer_length(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("export")  # "$ " (2 cols) + "export" -> column 9
+
+        editor.display_candidates(["export"])
+
+        assert capsys.readouterr().out.endswith("\033[9G")
+
+    def test_sets_candidate_lines_to_the_number_of_lines_shown(self):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+
+        editor.display_candidates(["echo", "exit", "export"])
+
+        assert editor.candidate_lines == 3
+
+
+class TestClearCandidates:
+    def test_does_nothing_when_nothing_is_displayed(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+
+        editor.clear_candidates()
+
+        assert capsys.readouterr().out == ""
+
+    def test_erases_one_line_per_line_shown_and_moves_back_up(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.candidate_lines = 2
+
+        editor.clear_candidates()
+
+        assert capsys.readouterr().out == "\033[B\033[2K" * 2 + "\033[2A\r"
+
+    def test_resets_candidate_lines_to_zero(self):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.candidate_lines = 3
+
+        editor.clear_candidates()
+
+        assert editor.candidate_lines == 0
+
+    def test_is_a_no_op_when_called_a_second_time(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.candidate_lines = 2
+        editor.clear_candidates()
+        capsys.readouterr()  # discard the first call's output
+
+        editor.clear_candidates()
+
+        assert capsys.readouterr().out == ""
+
+    def test_after_display_candidates_erases_exactly_what_was_shown(self, capsys):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("e")
+        editor.display_candidates(["echo", "exit"])
+        capsys.readouterr()  # discard display_candidates's own output
+
+        editor.clear_candidates()
+
+        assert capsys.readouterr().out == "\033[B\033[2K" * 2 + "\033[2A\r"
+        assert editor.candidate_lines == 0
 
 
 # ---------------------------------------------------------------------------

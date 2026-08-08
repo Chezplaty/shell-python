@@ -1,19 +1,45 @@
 import sys
 import os
 from pathlib import Path
+import math
+import shutil
 
 from app.shell_builtins import BUILTINS
 
 class CandidateCursor:
+    """Cycles through tab-completion candidates for a single prefix."""
 
     def __init__(self, candidates: list[str]):
         self.candidates = candidates
         self.index = 0
+        self.listed = False #whether the full candidate list has already been shown
 
     def next(self) -> str:
         candidate = self.candidates[self.index]
         self.index = (self.index + 1) % len(self.candidates) #wrap around
         return candidate
+
+def get_terminal_width() -> int:
+    return shutil.get_terminal_size(fallback=(80, 24)).columns
+
+def format_candidates(candidates: list[str]):
+
+    column_width = max(map(len, candidates)) + 2
+    columns = max(1, get_terminal_width()//column_width) # 1 in case terminal width smaller than column
+    rows = math.ceil(len(candidates) / columns)
+
+    lines = []
+    for row in range(rows):
+        line = []
+
+        for col in range(columns):
+            index = col * rows + row #column-major: fill down each column before moving right
+            if index < len(candidates):
+                line.append(candidates[index].ljust(column_width))
+
+        lines.append("".join(line).rstrip())
+
+    return lines
 
 def compile_choices() -> list[str]:
     """
@@ -87,45 +113,85 @@ class LineEditor:
         self.buffer = []
         self.tab_cursor = None
         self.choices = choices
+        self.candidate_lines = 0
 
     def run(self) -> str:
         while True:
             key = sys.stdin.read(1) #read one char at a time
 
-            if key not in {'\t', '\x7f'}:
-                self.add_key(key)
-
             if key == '\n':
+                self.clear_candidates()
+                sys.stdout.write(key)
+                sys.stdout.flush()
                 return "".join(self.buffer)
 
             if key == '\t':
                 self.handle_tab()
                 continue
 
-            self.tab_cursor = None
+            #any non-tab key cancels in-progress completion cycle
+            self.tab_cursor = None 
+
             if key == '\x7f':
                 self.handle_backspace()
+                continue
 
+            self.add_key(key) # any other character typed normally
+            
     def add_key(self, key: str):
         sys.stdout.write(key)
         sys.stdout.flush()
         self.buffer.append(key)
 
+    def display_candidates(self, lines: list[str]):
+        column = len(self.buffer) + 3 # "$ " (2 cols) + buffer, 1-indexed, just past the last typed char
+
+        for line in lines:
+            sys.stdout.write("\n\r")
+            sys.stdout.write(line)
+
+        sys.stdout.write(f"\033[{len(lines)}A") # back up to the prompt line
+        sys.stdout.write(f"\033[{column}G") # restore the column cursor was at
+        sys.stdout.flush()
+
+        self.candidate_lines = len(lines)
+
+    def clear_candidates(self):
+        if not self.candidate_lines: #lines == 0
+            return
+
+        for _ in range(self.candidate_lines): 
+            sys.stdout.write("\033[B") #move down
+            sys.stdout.write("\033[2K") #erase
+
+        sys.stdout.write(f"\033[{self.candidate_lines}A\r")
+        sys.stdout.flush()
+
+        self.candidate_lines = 0
+
     def handle_tab(self):
         prefix = "".join(self.buffer)
+        #TODO: print tab for empty buffer
         if not prefix:
             bell()
             return
-        
+
         if self.tab_cursor is None:
             candidates = get_candidates(self.choices, prefix)
-            if candidates:
-                self.tab_cursor = CandidateCursor(candidates)
-            else: #no candidates found
+            if not candidates:
                 bell()
                 return
+            self.tab_cursor = CandidateCursor(candidates)
+            bell()
 
-        candidate = self.tab_cursor.next()
+        cursor = self.tab_cursor
+        if not cursor.listed and len(cursor.candidates) > 1:
+            self.display_candidates(format_candidates(cursor.candidates))
+            cursor.listed = True
+        else:
+            self.complete(cursor.next())
+
+    def complete(self, candidate: str):
         redraw(candidate)
         self.buffer.clear()
         self.buffer.extend(candidate)

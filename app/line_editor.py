@@ -10,19 +10,32 @@ class CandidateCursor:
     """Cycles through tab-completion candidates for a single prefix."""
 
     def __init__(self, candidates: list[str]):
+        """
+        Stores the candidate list and starts cycling from the first entry.
+        """
         self.candidates = candidates
         self.index = 0
         self.listed = False #whether the full candidate list has already been shown
 
     def next(self) -> str:
+        """
+        Returns the current candidate and advances to the next one, wrapping around.
+        """
         candidate = self.candidates[self.index]
         self.index = (self.index + 1) % len(self.candidates) #wrap around
         return candidate
 
 def get_terminal_width() -> int:
+    """
+    Returns the current terminal width in columns, falling back to 80 if unknown.
+    """
     return shutil.get_terminal_size(fallback=(80, 24)).columns
 
 def format_candidates(candidates: list[str]):
+    """
+    Lays out candidates into column-major rows sized to fit the terminal width.
+    Returns a list of formatted lines ready to print beneath the prompt.
+    """
 
     column_width = max(map(len, candidates)) + 2
     columns = max(1, get_terminal_width()//column_width) # 1 in case terminal width smaller than column
@@ -103,6 +116,9 @@ def redraw(output: str) -> None:
     sys.stdout.flush()
 
 def bell() -> None:
+    """
+    Rings the terminal bell to signal an invalid or ambiguous completion.
+    """
     sys.stdout.write('\x07') #bell sound
     sys.stdout.flush()
 
@@ -110,12 +126,19 @@ def bell() -> None:
 class LineEditor:
 
     def __init__(self, choices: list[str]):
+        """
+        Sets up an empty input buffer and stores the known completion choices.
+        """
         self.buffer = []
         self.tab_cursor = None
         self.choices = choices
         self.candidate_lines = 0
 
     def run(self) -> str:
+        """
+        Reads keystrokes one at a time, handling editing and tab completion.
+        Returns the finished line once the user presses enter.
+        """
         while True:
             key = sys.stdin.read(1) #read one char at a time
 
@@ -139,11 +162,18 @@ class LineEditor:
             self.add_key(key) # any other character typed normally
             
     def add_key(self, key: str):
+        """
+        Echoes a typed character to the terminal and appends it to the buffer.
+        """
         sys.stdout.write(key)
         sys.stdout.flush()
         self.buffer.append(key)
 
     def display_candidates(self, lines: list[str]):
+        """
+        Prints candidate lines below the prompt without disturbing the cursor.
+        Restores the cursor to its original position after drawing them.
+        """
         column = len(self.buffer) + 3 # "$ " (2 cols) + buffer, 1-indexed, just past the last typed char
 
         for line in lines:
@@ -157,6 +187,10 @@ class LineEditor:
         self.candidate_lines = len(lines)
 
     def clear_candidates(self):
+        """
+        Erases any previously displayed candidate lines from the terminal.
+        Does nothing if no candidates are currently shown.
+        """
         if not self.candidate_lines: #lines == 0
             return
 
@@ -170,6 +204,10 @@ class LineEditor:
         self.candidate_lines = 0
 
     def handle_tab(self):
+        """
+        Advances the tab-completion state machine for the current buffer.
+        Lists candidates on first ambiguous tab, then cycles through them.
+        """
         prefix = "".join(self.buffer)
         #TODO: print tab for empty buffer
         if not prefix:
@@ -192,11 +230,19 @@ class LineEditor:
             self.complete(cursor.next())
 
     def complete(self, candidate: str):
+        """
+        Replaces the current buffer with the chosen completion candidate.
+        Redraws the prompt line to reflect the new buffer contents.
+        """
         redraw(candidate)
         self.buffer.clear()
         self.buffer.extend(candidate)
 
     def handle_backspace(self):
+        """
+        Removes the last character from the buffer and erases it on screen.
+        Does nothing if the buffer is already empty.
+        """
         if self.buffer:
             self.buffer.pop()
             sys.stdout.write("\b \b")

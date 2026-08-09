@@ -1146,19 +1146,46 @@ class TestGetCandidates:
 
 
 # ---------------------------------------------------------------------------
+# Tab-completion for file arguments: get_file_candidates
+# ---------------------------------------------------------------------------
+
+class TestGetFileCandidates:
+    def test_matches_files_starting_with_the_prefix(self, tmp_path, monkeypatch):
+        (tmp_path / "readme.md").touch()
+        (tmp_path / "report.txt").touch()
+        (tmp_path / "other.txt").touch()
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+
+        assert sorted(tab_completion.get_file_candidates("re")) == ["readme.md", "report.txt"]
+
+    def test_excludes_directories(self, tmp_path, monkeypatch):
+        (tmp_path / "report_dir").mkdir()
+        (tmp_path / "report.txt").touch()
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+
+        assert tab_completion.get_file_candidates("report") == ["report.txt"]
+
+    def test_empty_prefix_returns_no_candidates(self, tmp_path, monkeypatch):
+        (tmp_path / "anything.txt").touch()
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+
+        assert tab_completion.get_file_candidates("") == []
+
+
+# ---------------------------------------------------------------------------
 # Tab-completion for builtins: redraw / autocomplete
 # ---------------------------------------------------------------------------
 
 class TestRedraw:
-    def test_writes_clear_line_then_prompt_and_output(self, capsys):
-        line_editor.redraw("echo")
+    def test_erases_the_prefix_and_writes_the_output_in_its_place(self, capsys):
+        line_editor.redraw("echo", "ec")
 
-        assert capsys.readouterr().out == "\r\033[2K$ echo"
+        assert capsys.readouterr().out == "\033[2D\033[0Kecho"
 
-    def test_writes_bare_prompt_for_empty_output(self, capsys):
-        line_editor.redraw("")
+    def test_empty_prefix_only_appends_the_output(self, capsys):
+        line_editor.redraw("echo", "")
 
-        assert capsys.readouterr().out == "\r\033[2K$ "
+        assert capsys.readouterr().out == "\033[0D\033[0Kecho"
 
 
 class TestLineEditorBackspace:
@@ -1227,7 +1254,7 @@ class TestAutocomplete:
 
         # A unique prefix still bells (see handle_tab's cursor-creation
         # branch) before completing in place on the very first tab.
-        assert capsys.readouterr().out == "\x07\r\033[2K$ echo"
+        assert capsys.readouterr().out == "\x07\033[3D\033[0Kecho"
 
     def test_no_match_rings_the_bell(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
@@ -1251,7 +1278,61 @@ class TestAutocomplete:
 
         editor.handle_tab()
 
-        assert "\033[2K" not in capsys.readouterr().out
+        assert "\033[0K" not in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# LineEditor tab-completion for file arguments
+# ---------------------------------------------------------------------------
+
+class TestFileArgumentCompletion:
+    def test_completes_a_file_argument_after_a_space(self, tmp_path, monkeypatch):
+        (tmp_path / "notes.txt").touch()
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("cat no")
+
+        editor.handle_tab()
+
+        assert "".join(editor.buffer) == "cat notes.txt"
+
+    def test_cycling_erases_the_previous_candidate_not_just_the_original_prefix(self, tmp_path, monkeypatch):
+        (tmp_path / "readme.md").touch()
+        (tmp_path / "report.txt").touch()
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("cat re")
+
+        editor.handle_tab()  # ambiguous - lists readme.md / report.txt
+        editor.handle_tab()  # completes to the first match
+        first = "".join(editor.buffer)
+        editor.handle_tab()  # cycles to the other match
+        second = "".join(editor.buffer)
+
+        # Regression check: if cursor.prefix weren't updated to the previous
+        # candidate after each completion, this cycle would only erase the
+        # original 2-char "re" and leave stray characters behind.
+        assert {first, second} == {"cat readme.md", "cat report.txt"}
+
+    def test_trailing_space_then_tab_rings_the_bell_without_completing(self, tmp_path, monkeypatch, capsys):
+        (tmp_path / "only.txt").touch()
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("cat ")
+
+        editor.handle_tab()
+
+        assert capsys.readouterr().out == "\x07"
+        assert "".join(editor.buffer) == "cat "
+
+    def test_complete_with_empty_prefix_does_not_wipe_the_buffer(self):
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("cat ")
+        cursor = tab_completion.CandidateCursor(["only.txt"], "")
+
+        editor.complete(cursor)
+
+        assert "".join(editor.buffer) == "cat only.txt"
 
 
 # ---------------------------------------------------------------------------

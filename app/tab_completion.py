@@ -9,11 +9,13 @@ from app.shell_builtins import BUILTINS
 class CandidateCursor:
     """Cycles through tab-completion candidates for a single prefix."""
 
-    def __init__(self, candidates: list[str]):
+    def __init__(self, candidates: list[str], prefix: str):
         """
-        Stores the candidate list and starts cycling from the first entry.
+        Stores the candidates and the text currently shown on screen for this word,
+        and starts cycling from the first entry.
         """
         self.candidates = candidates
+        self.prefix = prefix
         self.index = 0
         self.listed = False #whether the full candidate list has already been shown
 
@@ -95,7 +97,7 @@ def get_candidates(choices: list[str], prefix: str) -> list[str]:
     Finds all sorted entries that begin with the given prefix.
     Returns a list of possible autocomplete matches.
     """
-
+    
     start = find_insertion_point(choices, prefix)
     candidates = []
 
@@ -104,6 +106,21 @@ def get_candidates(choices: list[str], prefix: str) -> list[str]:
         start += 1
 
     return candidates
+
+def get_file_candidates(prefix: str) -> list[str]:
+    """
+    Returns filenames in the current directory that start with the given prefix.
+    """
+    if not prefix:
+        return []
+
+    files = []
+
+    for path in Path.cwd().iterdir():
+        if path.is_file() and path.name.startswith(prefix):
+            files.append(path.name)
+
+    return files
 
 def bell() -> None:
     """

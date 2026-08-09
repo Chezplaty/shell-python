@@ -1,15 +1,15 @@
 import sys
 
-from app.tab_completion import CandidateCursor, format_candidates, get_candidates, bell
+from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_file_candidates, bell
 
-def redraw(output: str) -> None:
+def redraw(output: str, prefix: str) -> None:
     """
-    Clears the current terminal line and redraws the shell prompt.
-    Displays the provided output after the prompt symbol.
+    Erases the last len(prefix) characters before the cursor and writes output in their place.
     """
 
-    sys.stdout.write("\r\033[2K") #clear line
-    sys.stdout.write(f"$ {output}")
+    sys.stdout.write(f"\033[{len(prefix)}D") #move cursor to before prefix
+    sys.stdout.write("\033[0K") #erase from cursor to end of line
+    sys.stdout.write(f"{output}")
     sys.stdout.flush()
 
 
@@ -98,18 +98,24 @@ class LineEditor:
         Advances the tab-completion state machine for the current buffer.
         Lists candidates on first ambiguous tab, then cycles through them.
         """
-        prefix = "".join(self.buffer)
         #TODO: print tab for empty buffer
-        if not prefix:
+        if not self.buffer:
             bell()
             return
 
         if self.tab_cursor is None:
-            candidates = get_candidates(self.choices, prefix)
+            prefix = "".join(self.buffer)
+            before, sep, prefix = prefix.rpartition(" ")
+            if sep: #if there is a space
+                candidates = get_file_candidates(prefix)
+            else:
+                candidates = get_candidates(self.choices, prefix)
+
             if not candidates:
                 bell()
                 return
-            self.tab_cursor = CandidateCursor(candidates)
+
+            self.tab_cursor = CandidateCursor(candidates, prefix)
             bell()
 
         cursor = self.tab_cursor
@@ -117,16 +123,21 @@ class LineEditor:
             self.display_candidates(format_candidates(cursor.candidates))
             cursor.listed = True
         else:
-            self.complete(cursor.next())
+            self.complete(cursor)
 
-    def complete(self, candidate: str) -> None:
+    def complete(self, cursor: CandidateCursor) -> None:
         """
-        Replaces the current buffer with the chosen completion candidate.
-        Redraws the prompt line to reflect the new buffer contents.
+        Swaps the cursor's currently displayed word for its next candidate,
+        on screen and in the buffer.
         """
-        redraw(candidate)
-        self.buffer.clear()
+        candidate = cursor.next()
+        redraw(candidate, cursor.prefix)
+
+        if cursor.prefix:
+            del self.buffer[-len(cursor.prefix):] #delete prefix from buffer
+            
         self.buffer.extend(candidate)
+        cursor.prefix = candidate
 
     def handle_backspace(self) -> None:
         """

@@ -133,8 +133,8 @@ def run_shell(commands: list[str], cwd: Path = REPO_ROOT, env: dict | None = Non
         # The pty's line discipline translates outgoing "\n" to "\r\n" (normal
         # terminal output processing), which isn't something the shell itself
         # is doing. Undo it so assertions can keep comparing against plain
-        # "\n" as before. This leaves bare "\r" (e.g. the tab-completion
-        # redraw's "\r\033[2K" cursor reset) untouched.
+        # "\n" as before. This leaves bare "\r" (e.g. clear_candidates'
+        # "\r" cursor-to-column-0 reset) untouched.
         out = shell.output.decode(errors="replace").replace("\r\n", "\n")
         return out, shell.proc.returncode
     finally:
@@ -764,7 +764,7 @@ class TestTabAutocompletion:
 
         # A unique match still bells (see handle_tab's cursor-creation
         # branch) even though it completes immediately with no list shown.
-        assert "\x07\r\033[2K$ echo" in out
+        assert "\x07\033[2D\033[0Kecho" in out
         assert "hi\n" in out
 
     def test_tab_with_no_matching_builtin_rings_the_bell_and_leaves_the_buffer_untouched(self):
@@ -784,7 +784,7 @@ class TestTabAutocompletion:
 
         out, returncode = run_shell(["e\t\t", "exit"], env=env)
 
-        assert "\033[2K$ echo" in out
+        assert "\033[1D\033[0Kecho" in out
         assert returncode == 0
 
     def test_tab_cycles_through_multiple_matches_and_wraps_around(self, tmp_path):
@@ -796,8 +796,11 @@ class TestTabAutocompletion:
 
         out, returncode = run_shell(["e\t\t\t\t", "exit"], env=env)
 
-        echo_redraw = "\033[2K$ echo"
-        exit_redraw = "\033[2K$ exit"
+        # Each redraw's move-back distance changes across taps (it erases
+        # whatever's currently displayed, not the original "e"), so match on
+        # the erase+write marker common to every redraw call instead.
+        echo_redraw = "\033[0Kecho"
+        exit_redraw = "\033[0Kexit"
         first_echo = out.find(echo_redraw)
         exit_at = out.find(exit_redraw)
         second_echo = out.find(echo_redraw, first_echo + 1)
@@ -820,7 +823,7 @@ class TestTabAutocompletionForPathExecutables:
 
         out, returncode = run_shell(["custom_exe_94\t", "exit"], env=env)
 
-        assert "\033[2K$ custom_exe_9492" in out
+        assert "\033[13D\033[0Kcustom_exe_9492" in out
         assert returncode == 0
 
 
@@ -843,7 +846,7 @@ class TestTabCandidateList:
         assert "$ e\x07\n\recho  exit\033[1A\033[4G" in out
         # Second Tab: the buffer completes to the first candidate in place -
         # the list is left on screen rather than cleared here.
-        assert "\r\033[2K$ echo" in out
+        assert "\033[1D\033[0Kecho" in out
         # Enter: the still-displayed candidate line is erased (move down,
         # clear, move back up) before the completed "echo" command runs.
         assert "\033[B\033[2K\033[1A\r" in out

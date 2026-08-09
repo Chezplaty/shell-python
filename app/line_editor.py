@@ -7,7 +7,8 @@ def redraw(output: str, prefix: str) -> None:
     Erases the last len(prefix) characters before the cursor and writes output in their place.
     """
 
-    sys.stdout.write(f"\033[{len(prefix)}D") #move cursor to before prefix
+    if prefix: #a 0-length move is still interpreted as 1 by terminals, so skip it
+        sys.stdout.write(f"\033[{len(prefix)}D") #move cursor to before prefix
     sys.stdout.write("\033[0K") #erase from cursor to end of line
     sys.stdout.write(f"{output}")
     sys.stdout.flush()
@@ -107,7 +108,7 @@ class LineEditor:
             prefix = "".join(self.buffer)
             before, sep, prefix = prefix.rpartition(" ")
             if sep: #if there is a space
-                candidates = get_file_candidates(prefix)
+                prefix, candidates = get_file_candidates(prefix)
             else:
                 candidates = get_candidates(self.choices, prefix)
 
@@ -120,6 +121,10 @@ class LineEditor:
 
         cursor = self.tab_cursor
         if not cursor.listed and len(cursor.candidates) > 1:
+
+            if self.candidate_lines: #if anything from beofre displayed, clear it
+                self.clear_candidates()
+
             self.display_candidates(format_candidates(cursor.candidates))
             cursor.listed = True
         else:

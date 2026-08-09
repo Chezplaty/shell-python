@@ -828,6 +828,65 @@ class TestTabAutocompletionForPathExecutables:
 
 
 # ---------------------------------------------------------------------------
+# Tab autocompletion for nested file paths
+# ---------------------------------------------------------------------------
+
+class TestTabAutocompletionForNestedFiles:
+    def test_tab_completes_a_unique_file_in_a_subdirectory(self, tmp_path):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "notes.txt").touch()
+
+        out, returncode = run_shell(["cat sub/no\t", "exit"], cwd=tmp_path)
+
+        # Only "no" (the segment after the last "/") is erased and replaced,
+        # leaving the "sub/" directory part of the buffer untouched.
+        assert "\033[2D\033[0Knotes.txt" in out
+        assert returncode == 0
+
+    def test_running_the_completed_nested_path_reads_the_right_file(self, tmp_path):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "notes.txt").write_text("nested file contents\n")
+
+        out, _ = run_shell(["cat sub/no\t", "exit"], cwd=tmp_path)
+
+        assert "nested file contents\n" in out
+
+    def test_tab_with_multiple_nested_matches_lists_then_completes(self, tmp_path):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "readme.md").touch()
+        (sub / "report.txt").touch()
+
+        out, returncode = run_shell(["cat sub/re\t\t", "exit"], cwd=tmp_path)
+
+        # First Tab lists both matches without completing; second Tab
+        # completes to the first one alphabetically ("readme.md").
+        assert "readme.md" in out and "report.txt" in out
+        assert "\033[0Kreadme.md" in out
+        assert returncode == 0
+
+    def test_tab_with_trailing_separator_completes_the_only_file_in_the_directory(self, tmp_path):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "only.txt").touch()
+
+        out, returncode = run_shell(["cat sub/\t", "exit"], cwd=tmp_path)
+
+        assert "\033[0Konly.txt" in out
+        assert returncode == 0
+
+    def test_tab_with_nonexistent_directory_rings_the_bell_and_leaves_buffer_untouched(self, tmp_path):
+        out, _ = run_shell(["cat does_not_exist/no\t", "exit"], cwd=tmp_path)
+
+        # No candidates means the buffer is never completed, so running it
+        # still attempts the literal (nonexistent) path the user typed.
+        assert "\x07" in out
+        assert "does_not_exist/no: No such file or directory\n" in out
+
+
+# ---------------------------------------------------------------------------
 # Tab autocompletion: candidate list display/clear for multiple matches
 # ---------------------------------------------------------------------------
 

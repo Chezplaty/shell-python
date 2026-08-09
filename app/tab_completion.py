@@ -107,20 +107,33 @@ def get_candidates(choices: list[str], prefix: str) -> list[str]:
 
     return candidates
 
-def get_file_candidates(prefix: str) -> list[str]:
+def get_file_candidates(prefix: str) -> tuple[str, list[str]]:
     """
-    Returns filenames in the current directory that start with the given prefix.
+    Returns filenames starting with the given prefix's final path segment,
+    looked up in the directory named by everything before it (the current
+    directory if the prefix has no separator).
+    Returns the (possibly narrowed) prefix alongside the matches, since
+    completion only ever replaces that final segment.
     """
     if not prefix:
-        return []
+        return prefix, []
 
+    loc, sep, prefix = prefix.rpartition(os.sep)
     files = []
 
-    for path in Path.cwd().iterdir():
-        if path.is_file() and path.name.startswith(prefix):
-            files.append(path.name)
+    if sep:
+        loc = loc or os.sep # rpartition empties loc for a root-level prefix like "/etc"
+    else:
+        loc = Path.cwd()
 
-    return files
+    try:
+        for path in Path(loc).iterdir():
+            if path.is_file() and path.name.startswith(prefix):
+                files.append(path.name)
+    except OSError: # loc is not a direc or cant be accessed
+        pass
+
+    return prefix, files #prefix might change, return it
 
 def bell() -> None:
     """

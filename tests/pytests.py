@@ -1156,20 +1156,102 @@ class TestGetFileCandidates:
         (tmp_path / "other.txt").touch()
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        assert sorted(tab_completion.get_file_candidates("re")) == ["readme.md", "report.txt"]
+        prefix, files = tab_completion.get_file_candidates("re")
+
+        assert prefix == "re"
+        assert sorted(files) == ["readme.md", "report.txt"]
 
     def test_excludes_directories(self, tmp_path, monkeypatch):
         (tmp_path / "report_dir").mkdir()
         (tmp_path / "report.txt").touch()
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        assert tab_completion.get_file_candidates("report") == ["report.txt"]
+        prefix, files = tab_completion.get_file_candidates("report")
+
+        assert files == ["report.txt"]
 
     def test_empty_prefix_returns_no_candidates(self, tmp_path, monkeypatch):
         (tmp_path / "anything.txt").touch()
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
-        assert tab_completion.get_file_candidates("") == []
+        prefix, files = tab_completion.get_file_candidates("")
+
+        assert prefix == ""
+        assert files == []
+
+    def test_nested_relative_prefix_matches_files_in_the_subdirectory(self, tmp_path, monkeypatch):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "readme.md").touch()
+        (sub / "report.txt").touch()
+        (tmp_path / "report.txt").touch() # same-named file in cwd should not leak in
+        monkeypatch.chdir(tmp_path)
+
+        prefix, files = tab_completion.get_file_candidates("sub/re")
+
+        assert prefix == "re"
+        assert sorted(files) == ["readme.md", "report.txt"]
+
+    def test_nested_prefix_with_trailing_separator_lists_every_file_in_the_directory(self, tmp_path, monkeypatch):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "one.txt").touch()
+        (sub / "two.txt").touch()
+        monkeypatch.chdir(tmp_path)
+
+        prefix, files = tab_completion.get_file_candidates(f"sub{os.sep}")
+
+        assert prefix == ""
+        assert sorted(files) == ["one.txt", "two.txt"]
+
+    def test_nested_prefix_excludes_subdirectories(self, tmp_path, monkeypatch):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "inner_dir").mkdir()
+        (sub / "file.txt").touch()
+        monkeypatch.chdir(tmp_path)
+
+        prefix, files = tab_completion.get_file_candidates(f"sub{os.sep}")
+
+        assert files == ["file.txt"]
+
+    def test_multiple_levels_of_nesting_are_resolved(self, tmp_path, monkeypatch):
+        nested = tmp_path / "a" / "b" / "c"
+        nested.mkdir(parents=True)
+        (nested / "deep.txt").touch()
+        monkeypatch.chdir(tmp_path)
+
+        prefix, files = tab_completion.get_file_candidates(os.sep.join(["a", "b", "c", "de"]))
+
+        assert prefix == "de"
+        assert files == ["deep.txt"]
+
+    def test_absolute_path_prefix_matches_files_in_that_directory(self, tmp_path):
+        (tmp_path / "readme.md").touch()
+        (tmp_path / "other.txt").touch()
+
+        prefix, files = tab_completion.get_file_candidates(f"{tmp_path}{os.sep}re")
+
+        assert prefix == "re"
+        assert files == ["readme.md"]
+
+    def test_root_level_absolute_prefix_looks_up_the_root_directory(self, monkeypatch):
+        # "/etc" has nothing before its final separator: rpartition leaves
+        # loc == "", which used to be mistaken for "no separator" and quietly
+        # fall back to the cwd. It should resolve to "/" instead.
+        seen_locs = []
+        monkeypatch.setattr(Path, "iterdir", lambda self: seen_locs.append(self) or iter([]))
+
+        tab_completion.get_file_candidates(f"{os.sep}etc_prefix")
+
+        assert seen_locs == [Path(os.sep)]
+
+    def test_nonexistent_nested_directory_returns_no_candidates(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        prefix, files = tab_completion.get_file_candidates("does_not_exist/fi")
+
+        assert files == []
 
 
 # ---------------------------------------------------------------------------
@@ -1183,9 +1265,11 @@ class TestRedraw:
         assert capsys.readouterr().out == "\033[2D\033[0Kecho"
 
     def test_empty_prefix_only_appends_the_output(self, capsys):
+        # A 0-length move is still interpreted as 1 by terminals, so redraw
+        # skips the cursor-move escape entirely when there's no prefix to erase.
         line_editor.redraw("echo", "")
 
-        assert capsys.readouterr().out == "\033[0D\033[0Kecho"
+        assert capsys.readouterr().out == "\033[0Kecho"
 
 
 class TestLineEditorBackspace:
@@ -1333,6 +1417,47 @@ class TestFileArgumentCompletion:
         editor.complete(cursor)
 
         assert "".join(editor.buffer) == "cat only.txt"
+
+    def test_completes_a_nested_file_argument_leaving_the_directory_part_intact(self, tmp_path, monkeypatch):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "notes.txt").touch()
+        monkeypatch.chdir(tmp_path)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("cat sub/no")
+
+        editor.handle_tab()
+
+        assert "".join(editor.buffer) == "cat sub/notes.txt"
+
+    def test_nested_completion_cycling_only_erases_the_final_path_segment(self, tmp_path, monkeypatch):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "readme.md").touch()
+        (sub / "report.txt").touch()
+        monkeypatch.chdir(tmp_path)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("cat sub/re")
+
+        editor.handle_tab()  # ambiguous - lists readme.md / report.txt
+        editor.handle_tab()  # completes to the first match
+        first = "".join(editor.buffer)
+        editor.handle_tab()  # cycles to the other match, without duplicating "sub/"
+        second = "".join(editor.buffer)
+
+        assert {first, second} == {"cat sub/readme.md", "cat sub/report.txt"}
+
+    def test_nested_prefix_with_trailing_separator_completes_to_the_only_file_in_it(self, tmp_path, monkeypatch):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "only.txt").touch()
+        monkeypatch.chdir(tmp_path)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor.buffer = list("cat sub/")
+
+        editor.handle_tab()
+
+        assert "".join(editor.buffer) == "cat sub/only.txt"
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import sys
 
-from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_file_candidates, bell
+from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_path_candidates, bell
 
 def redraw(output: str, prefix: str) -> None:
     """
@@ -108,7 +108,7 @@ class LineEditor:
             prefix = "".join(self.buffer)
             before, sep, prefix = prefix.rpartition(" ")
             if sep: #if there is a space
-                prefix, candidates = get_file_candidates(prefix)
+                prefix, candidates = get_path_candidates(prefix)
             else:
                 candidates = get_candidates(self.choices, prefix)
 

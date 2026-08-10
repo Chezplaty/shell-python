@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import math
 import shutil
+import shlex
 
 from app.shell_builtins import BUILTINS
 
@@ -107,33 +108,33 @@ def get_candidates(choices: list[str], prefix: str) -> list[str]:
 
     return candidates
 
-def get_file_candidates(prefix: str) -> tuple[str, list[str]]:
+def get_path_candidates(prefix: str) -> tuple[str, list[str]]:
     """
-    Returns filenames starting with the given prefix's final path segment,
-    looked up in the directory named by everything before it (the current
-    directory if the prefix has no separator).
-    Returns the (possibly narrowed) prefix alongside the matches, since
-    completion only ever replaces that final segment.
+    Returns files and directories starting with the given prefix's final path segment.
+    Also returns the (possibly narrowed) prefix, since completion only ever replaces that final segment.
     """
+
+    #TODO: if prefix is empty, list all the directories in the cwd
     if not prefix:
         return prefix, []
 
-    loc, sep, prefix = prefix.rpartition(os.sep)
-    files = []
 
-    if sep:
-        loc = loc or os.sep # rpartition empties loc for a root-level prefix like "/etc"
-    else:
-        loc = Path.cwd()
+    path = Path(prefix)
+    loc, prefix = path.parent, path.name
+
+    paths = []
 
     try:
-        for path in Path(loc).iterdir():
-            if path.is_file() and path.name.startswith(prefix):
-                files.append(path.name)
+        for entry in loc.iterdir():
+            if entry.exists() and entry.name.startswith(prefix):
+                name = shlex.quote(entry.name)
+                if entry.is_dir():
+                    name += '/'
+                paths.append(name)
     except OSError: # loc is not a direc or cant be accessed
         pass
+    return prefix, paths #prefix might change, return it
 
-    return prefix, files #prefix might change, return it
 
 def bell() -> None:
     """

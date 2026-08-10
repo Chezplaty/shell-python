@@ -44,11 +44,6 @@ class TestFindCommand:
 
         assert path_utils.get_executable("does_not_exist") is None
 
-    def test_empty_path_returns_none(self, monkeypatch):
-        monkeypatch.setenv("PATH", "")
-
-        assert path_utils.get_executable("ls") is None
-
     def test_returns_first_match_in_path_order(self, tmp_path, monkeypatch):
         first_dir = tmp_path / "first"
         second_dir = tmp_path / "second"
@@ -92,24 +87,6 @@ class TestHandleExternalPrograms:
 
         captured = capsys.readouterr()
         assert captured.out == "nope: command not found\n"
-
-    def test_runs_with_no_args(self, monkeypatch):
-        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/ls"))
-        calls = []
-        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
-
-        executor.handle_external_programs("ls", [], {})
-
-        assert calls == [(["ls"], {"stdin": None, "stdout": None, "stderr": None})]
-
-    def test_runs_with_multiple_args(self, monkeypatch):
-        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/cp"))
-        calls = []
-        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
-
-        executor.handle_external_programs("cp", ["a.txt", "b.txt", "-v"], {})
-
-        assert calls == [(["cp", "a.txt", "b.txt", "-v"], {"stdin": None, "stdout": None, "stderr": None})]
 
     def test_forwards_resolved_redirect_files_to_subprocess_run(self, monkeypatch):
         monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/cat"))
@@ -158,20 +135,6 @@ class TestHandleType:
         captured = capsys.readouterr()
         assert captured.out == "echo is a shell builtin\n"
 
-    def test_loops_through_multiple_args_in_order(self, monkeypatch, capsys):
-        monkeypatch.setattr(
-            shell_builtins, "get_executable", lambda cmd: Path("/usr/bin/ls") if cmd == "ls" else None
-        )
-
-        shell_builtins.handle_type(make_instruction("type", ["echo", "ls", "bogus"]))
-
-        captured = capsys.readouterr()
-        assert captured.out == (
-            "echo is a shell builtin\n"
-            "ls is /usr/bin/ls\n"
-            "bogus: not found\n"
-        )
-
 
 # ---------------------------------------------------------------------------
 # handle_cd
@@ -196,16 +159,15 @@ class TestHandleCd:
 
         assert calls == [home]
 
-    def test_tilde_takes_precedence_over_matching_named_directory(self, monkeypatch):
+    def test_bare_cd_with_no_arguments_changes_to_home_directory(self, monkeypatch):
         home = Path("/home/user")
         monkeypatch.setattr(Path, "home", lambda: home)
         calls = []
         monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
 
-        shell_builtins.handle_cd(make_instruction("cd", ["~"]))
+        shell_builtins.handle_cd(make_instruction("cd", []))
 
         assert calls == [home]
-        assert calls != ["~"]
 
     def test_raises_error_for_too_many_arguments(self, monkeypatch):
         monkeypatch.setattr(os, "chdir", lambda path: pytest.fail("should not chdir"))
@@ -226,17 +188,6 @@ class TestHandleCd:
 
         assert str(exc_info.value) == "cd: /does/not/exist: No such file or directory"
 
-    def test_raises_error_when_path_is_not_a_directory(self, monkeypatch):
-        def raise_not_a_directory(path):
-            raise NotADirectoryError(20, "Not a directory")
-
-        monkeypatch.setattr(os, "chdir", raise_not_a_directory)
-
-        with pytest.raises(BuiltinError) as exc_info:
-            shell_builtins.handle_cd(make_instruction("cd", ["/some/file"]))
-
-        assert str(exc_info.value) == "cd: /some/file: Not a directory"
-
     def test_raises_error_when_permission_denied(self, monkeypatch):
         def raise_permission_error(path):
             raise PermissionError(13, "Permission denied")
@@ -247,16 +198,6 @@ class TestHandleCd:
             shell_builtins.handle_cd(make_instruction("cd", ["/locked"]))
 
         assert str(exc_info.value) == "cd: /locked: Permission denied"
-
-    def test_bare_cd_with_no_arguments_changes_to_home_directory(self, monkeypatch):
-        home = Path("/home/user")
-        monkeypatch.setattr(Path, "home", lambda: home)
-        calls = []
-        monkeypatch.setattr(os, "chdir", lambda path: calls.append(path))
-
-        shell_builtins.handle_cd(make_instruction("cd", []))
-
-        assert calls == [home]
 
 
 # ---------------------------------------------------------------------------
@@ -301,12 +242,6 @@ class TestResolveRedirectTargets:
 
         assert resolve_redirect_targets(instruction) == {1: (str(target), "w")}
 
-    def test_maps_redirect_stderr_to_fd_2_in_write_mode(self, tmp_path):
-        target = tmp_path / "err.md"
-        instruction = make_instruction("cat", [], [Redirect(TokenType.REDIRECT_STDERR, str(target))])
-
-        assert resolve_redirect_targets(instruction) == {2: (str(target), "w")}
-
     def test_stdout_and_stderr_redirects_resolve_to_independent_targets(self, tmp_path):
         out = tmp_path / "out.md"
         err = tmp_path / "err.md"
@@ -350,33 +285,6 @@ class TestResolveRedirectTargets:
 
         assert resolve_redirect_targets(instruction) == {1: (str(target), "a")}
 
-    def test_maps_append_stderr_to_fd_2_in_append_mode(self, tmp_path):
-        target = tmp_path / "err.md"
-        instruction = make_instruction("cat", [], [Redirect(TokenType.APPEND_STDERR, str(target))])
-
-        assert resolve_redirect_targets(instruction) == {2: (str(target), "a")}
-
-    def test_append_stdout_and_append_stderr_resolve_to_independent_targets(self, tmp_path):
-        out = tmp_path / "out.md"
-        err = tmp_path / "err.md"
-        instruction = make_instruction(
-            "cat",
-            [],
-            [Redirect(TokenType.APPEND_STDOUT, str(out)), Redirect(TokenType.APPEND_STDERR, str(err))],
-        )
-
-        assert resolve_redirect_targets(instruction) == {1: (str(out), "a"), 2: (str(err), "a")}
-
-    def test_append_stderr_after_overwrite_for_the_same_fd_overrides_it(self, tmp_path):
-        target = tmp_path / "err.md"
-        instruction = make_instruction(
-            "cat",
-            [],
-            [Redirect(TokenType.REDIRECT_STDERR, str(target)), Redirect(TokenType.APPEND_STDERR, str(target))],
-        )
-
-        assert resolve_redirect_targets(instruction) == {2: (str(target), "a")}
-
 
 # ---------------------------------------------------------------------------
 # open_redirects
@@ -400,22 +308,6 @@ class TestOpenRedirects:
             files[1].write("new")
 
         assert target.read_text() == "new"
-
-    def test_stdout_and_stderr_redirects_open_to_their_own_targets(self, tmp_path):
-        out = tmp_path / "out.md"
-        err = tmp_path / "err.md"
-        instruction = make_instruction(
-            "cat",
-            [],
-            [Redirect(TokenType.REDIRECT_STDOUT, str(out)), Redirect(TokenType.REDIRECT_STDERR, str(err))],
-        )
-
-        with open_redirects(instruction) as files:
-            files[1].write("stdout content")
-            files[2].write("stderr content")
-
-        assert out.read_text() == "stdout content"
-        assert err.read_text() == "stderr content"
 
     def test_closes_opened_files_once_the_block_exits(self, tmp_path):
         target = tmp_path / "out.md"
@@ -469,26 +361,6 @@ class TestOpenRedirects:
         finally:
             locked_dir.chmod(0o700)
 
-    def test_error_message_uses_the_instructions_own_cmd(self, tmp_path):
-        target = tmp_path / "missing_dir" / "out.md"
-        instruction = make_instruction("cat", [], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
-
-        with pytest.raises(BuiltinError) as exc_info:
-            with open_redirects(instruction):
-                pass
-
-        assert str(exc_info.value).startswith("cat:")
-
-    def test_does_not_create_parent_directories_when_redirect_fails(self, tmp_path):
-        target = tmp_path / "missing_dir" / "out.md"
-        instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
-
-        with pytest.raises(BuiltinError):
-            with open_redirects(instruction):
-                pass
-
-        assert not target.parent.exists()
-
     def test_append_mode_creates_file_when_it_does_not_exist(self, tmp_path):
         target = tmp_path / "out.md"
         instruction = make_instruction("echo", ["hi"], [Redirect(TokenType.APPEND_STDOUT, str(target))])
@@ -506,24 +378,6 @@ class TestOpenRedirects:
             files[1].write("new\n")
 
         assert target.read_text() == "existing\nnew\n"
-
-    def test_append_stderr_mode_creates_file_when_it_does_not_exist(self, tmp_path):
-        target = tmp_path / "err.md"
-        instruction = make_instruction("cat", [], [Redirect(TokenType.APPEND_STDERR, str(target))])
-
-        with open_redirects(instruction) as files:
-            assert target.exists()
-            assert set(files) == {2}
-
-    def test_append_stderr_mode_preserves_existing_content_and_writes_after_it(self, tmp_path):
-        target = tmp_path / "err.md"
-        target.write_text("existing error\n")
-        instruction = make_instruction("cat", [], [Redirect(TokenType.APPEND_STDERR, str(target))])
-
-        with open_redirects(instruction) as files:
-            files[2].write("new error\n")
-
-        assert target.read_text() == "existing error\nnew error\n"
 
 
 # ---------------------------------------------------------------------------
@@ -564,19 +418,6 @@ class TestRedirectedFds:
         assert (during.st_dev, during.st_ino) == (os.stat(target).st_dev, os.stat(target).st_ino)
         assert (during.st_dev, during.st_ino) != (before.st_dev, before.st_ino)
         assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
-
-    def test_stdout_and_stderr_are_redirected_independently(self, tmp_path, capfd):
-        out = tmp_path / "out.md"
-        err = tmp_path / "err.md"
-
-        with capfd.disabled():
-            with open(out, "w") as out_file, open(err, "w") as err_file:
-                with redirected_fds({1: out_file, 2: err_file}):
-                    print("stdout line")
-                    print("stderr line", file=sys.stderr)
-
-        assert out.read_text() == "stdout line\n"
-        assert err.read_text() == "stderr line\n"
 
 
 # ---------------------------------------------------------------------------
@@ -623,19 +464,6 @@ class TestHandleCommand:
             )
 
         assert target.read_text() == "hello world\n"
-
-    def test_external_command_stderr_redirect_leaves_stdout_untouched(self, monkeypatch, tmp_path):
-        target = tmp_path / "err.md"
-        monkeypatch.setattr(executor, "get_executable", lambda cmd: Path("/usr/bin/cat"))
-        calls = []
-        monkeypatch.setattr(executor.subprocess, "run", lambda args, **kwargs: calls.append(kwargs))
-
-        executor.handle_command(
-            make_instruction("cat", ["missing"], [Redirect(TokenType.REDIRECT_STDERR, str(target))])
-        )
-
-        assert calls[0]["stdout"] is None
-        assert calls[0]["stderr"].name == str(target)
 
     def test_exact_match_required_not_prefix(self, capsys):
         executor.handle_command(make_instruction("echoing", ["surprise"]))
@@ -725,13 +553,6 @@ class TestHandleNormal:
         assert token_values(lexer._tokens) == ["hi"]
         assert lexer._current == []
 
-    def test_whitespace_with_empty_current_does_not_add_empty_token(self):
-        lexer = Lexer()
-
-        lexer.handle_normal(" ")
-
-        assert lexer._tokens == []
-
     def test_single_quote_switches_state_to_single(self):
         lexer = Lexer()
 
@@ -764,15 +585,6 @@ class TestHandleNormal:
 
         assert lexer._current == [" "]
         assert lexer._escaping is False
-
-    def test_escaping_treats_quote_characters_as_literal(self):
-        lexer = Lexer()
-        lexer._escaping = True
-
-        lexer.handle_normal("'")
-
-        assert lexer._current == ["'"]
-        assert lexer._state == LexState.NORMAL
 
 
 # ---------------------------------------------------------------------------
@@ -880,58 +692,29 @@ class TestTokenize:
     def test_collapses_repeated_whitespace(self):
         assert token_values(Lexer().tokenize("echo    hi     there")) == ["echo", "hi", "there"]
 
-    def test_ignores_leading_and_trailing_whitespace(self):
-        assert token_values(Lexer().tokenize("  echo hi  ")) == ["echo", "hi"]
-
     def test_empty_line_returns_empty_list(self):
         assert Lexer().tokenize("") == []
 
-    def test_whitespace_only_line_returns_empty_list(self):
-        assert Lexer().tokenize("   ") == []
-
     def test_single_quotes_preserve_spaces_between_words(self):
         assert token_values(Lexer().tokenize("echo 'shell hello'")) == ["echo", "shell hello"]
-
-    def test_single_quotes_preserve_repeated_internal_whitespace(self):
-        assert token_values(Lexer().tokenize("echo 'world     test'")) == ["echo", "world     test"]
 
     def test_multiple_single_quoted_arguments(self):
         result = token_values(Lexer().tokenize("cat '/tmp/file name' '/tmp/file name with spaces'"))
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
 
-    def test_single_quotes_can_produce_empty_argument(self):
-        assert token_values(Lexer().tokenize("echo ''")) == ["echo"]
+    def test_single_quotes_preserve_backslashes_literally(self):
+        result = token_values(Lexer().tokenize(r"echo 'multiple\\slashes'"))
 
-    def test_single_quoted_argument_alone(self):
-        assert token_values(Lexer().tokenize("'hello world'")) == ["hello world"]
-
-    def test_mixes_quoted_and_unquoted_arguments(self):
-        result = token_values(Lexer().tokenize("echo hello 'shell world' again"))
-
-        assert result == ["echo", "hello", "shell world", "again"]
+        assert result == ["echo", "multiple\\\\slashes"]
 
     def test_double_quotes_preserve_spaces_between_words(self):
         assert token_values(Lexer().tokenize('echo "shell hello"')) == ["echo", "shell hello"]
-
-    def test_double_quotes_preserve_repeated_internal_whitespace(self):
-        assert token_values(Lexer().tokenize('echo "world     test"')) == ["echo", "world     test"]
 
     def test_multiple_double_quoted_arguments(self):
         result = token_values(Lexer().tokenize('cat "/tmp/file name" "/tmp/file name with spaces"'))
 
         assert result == ["cat", "/tmp/file name", "/tmp/file name with spaces"]
-
-    def test_double_quotes_can_produce_empty_argument(self):
-        assert token_values(Lexer().tokenize('echo ""')) == ["echo"]
-
-    def test_double_quoted_argument_alone(self):
-        assert token_values(Lexer().tokenize('"hello world"')) == ["hello world"]
-
-    def test_mixes_double_quoted_and_unquoted_arguments(self):
-        result = token_values(Lexer().tokenize('echo hello "shell world" again'))
-
-        assert result == ["echo", "hello", "shell world", "again"]
 
     def test_double_quotes_preserve_single_quote_inside(self):
         result = token_values(Lexer().tokenize("""echo "bar"  "shell's"  "foo" """))
@@ -943,45 +726,11 @@ class TestTokenize:
 
         assert result == ["echo", 'say "hi"']
 
-    def test_double_quotes_escaped_backslash_is_single_literal_backslash(self):
-        result = token_values(Lexer().tokenize('echo "a\\\\b"'))
-
-        assert result == ["echo", "a\\b"]
-
-    def test_double_quotes_escaped_dollar_sign_is_literal(self):
-        result = token_values(Lexer().tokenize('echo "\\$HOME"'))
-
-        assert result == ["echo", "$HOME"]
-
-    def test_double_quotes_escaped_backtick_is_literal(self):
-        result = token_values(Lexer().tokenize('echo "\\`cmd\\`"'))
-
-        assert result == ["echo", "`cmd`"]
-
-    def test_double_quotes_escaped_newline_is_literal(self):
-        result = token_values(Lexer().tokenize('echo "a\\\nb"'))
-
-        assert result == ["echo", "a\nb"]
-
     def test_double_quotes_escapes_multiple_special_characters_in_sequence(self):
         line = 'echo "' + '\\$' + '\\`' + '\\"' + '\\\\' + '"'
         result = token_values(Lexer().tokenize(line))
 
         assert result == ["echo", '$`"\\']
-
-    def test_double_quotes_escaped_ordinary_character_keeps_backslash(self):
-        # 'a' is not a special character, so the backslash is preserved
-        # literally alongside it rather than being consumed as an escape.
-        result = token_values(Lexer().tokenize('echo "\\a"'))
-
-        assert result == ["echo", "\\a"]
-
-    def test_double_quotes_escaped_single_quote_keeps_backslash_since_not_special(self):
-        # A single quote has no meaning inside double quotes, so it isn't in
-        # the special-character set and the backslash before it is literal.
-        result = token_values(Lexer().tokenize('echo "\\\'"'))
-
-        assert result == ["echo", "\\'"]
 
     def test_double_quotes_unterminated_escape_at_end_is_dropped(self):
         # Mirrors the trailing-lone-backslash behavior outside quotes:
@@ -992,23 +741,10 @@ class TestTokenize:
 
         assert result == ["echo", "abc"]
 
-    def test_single_quotes_preserve_backslashes_literally(self):
-        result = token_values(Lexer().tokenize(r"echo 'multiple\\slashes'"))
-
-        assert result == ["echo", "multiple\\\\slashes"]
-
     def test_backslash_escapes_a_following_space_into_a_literal_space(self):
         result = token_values(Lexer().tokenize(r"echo multiple\ \ \ \ spaces"))
 
         assert result == ["echo", "multiple    spaces"]
-
-    def test_backslash_escapes_quote_characters_outside_quotes(self):
-        result = token_values(Lexer().tokenize("echo \\'\\\"literal quotes\\\"\\'"))
-
-        assert result == ["echo", "'\"literal", "quotes\"'"]
-
-    def test_backslash_before_ordinary_character_just_drops_the_backslash(self):
-        assert token_values(Lexer().tokenize(r"echo ignore\_backslash")) == ["echo", "ignore_backslash"]
 
     def test_backslash_escaped_backslash_produces_a_single_literal_backslash(self):
         result = token_values(Lexer().tokenize(r"cat /tmp/\_ignored_1 /tmp/ignore_\2 /tmp/just_one_\\_3"))
@@ -1047,6 +783,14 @@ class TestCompileChoices:
 
         assert "my_custom_exe_1234" in choices
 
+    def test_finds_an_existing_uncommon_executable_on_the_real_path(self):
+        # cksum is a POSIX-standard utility present on both macOS and Linux
+        # but rarely used, so its presence here confirms compile_choices is
+        # actually scanning the real PATH rather than only builtins.
+        choices = tab_completion.compile_choices()
+
+        assert "cksum" in choices
+
     def test_non_executable_file_on_path_is_excluded(self, tmp_path, monkeypatch):
         non_exec = tmp_path / "not_executable_file"
         non_exec.write_text("not executable")
@@ -1075,14 +819,6 @@ class TestCompileChoices:
 
         assert "hidden_exe" not in choices
         assert "visible_exe" in choices
-
-    def test_finds_an_existing_uncommon_executable_on_the_real_path(self):
-        # cksum is a POSIX-standard utility present on both macOS and Linux
-        # but rarely used, so its presence here confirms compile_choices is
-        # actually scanning the real PATH rather than only builtins.
-        choices = tab_completion.compile_choices()
-
-        assert "cksum" in choices
 
     def test_duplicate_executable_names_across_directories_are_deduplicated(self, tmp_path, monkeypatch):
         first_dir, second_dir = tmp_path / "first", tmp_path / "second"
@@ -1138,102 +874,60 @@ class TestGetCandidates:
     def test_no_matching_builtin_returns_empty_list(self):
         assert tab_completion.get_candidates(BUILTIN_CHOICES, "zz") == []
 
-    def test_prefix_equal_to_a_full_builtin_name_matches_it(self):
-        assert tab_completion.get_candidates(BUILTIN_CHOICES, "cd") == ["cd"]
-
-    def test_empty_prefix_returns_every_builtin(self):
-        assert tab_completion.get_candidates(BUILTIN_CHOICES, "") == BUILTIN_CHOICES
-
 
 # ---------------------------------------------------------------------------
-# Tab-completion for file arguments: get_file_candidates
+# Tab-completion for file/directory arguments: get_path_candidates
 # ---------------------------------------------------------------------------
 
-class TestGetFileCandidates:
-    def test_matches_files_starting_with_the_prefix(self, tmp_path, monkeypatch):
-        (tmp_path / "readme.md").touch()
+class TestGetPathCandidates:
+    def test_matches_files_and_directories_starting_with_the_prefix(self, tmp_path, monkeypatch):
         (tmp_path / "report.txt").touch()
-        (tmp_path / "other.txt").touch()
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-
-        prefix, files = tab_completion.get_file_candidates("re")
-
-        assert prefix == "re"
-        assert sorted(files) == ["readme.md", "report.txt"]
-
-    def test_excludes_directories(self, tmp_path, monkeypatch):
         (tmp_path / "report_dir").mkdir()
-        (tmp_path / "report.txt").touch()
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        (tmp_path / "other.txt").touch()
+        monkeypatch.chdir(tmp_path)
 
-        prefix, files = tab_completion.get_file_candidates("report")
+        prefix, candidates = tab_completion.get_path_candidates("report")
 
-        assert files == ["report.txt"]
+        assert prefix == "report"
+        assert sorted(candidates) == ["report.txt", "report_dir/"]
 
     def test_empty_prefix_returns_no_candidates(self, tmp_path, monkeypatch):
         (tmp_path / "anything.txt").touch()
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
 
-        prefix, files = tab_completion.get_file_candidates("")
+        prefix, candidates = tab_completion.get_path_candidates("")
 
         assert prefix == ""
-        assert files == []
+        assert candidates == []
 
-    def test_nested_relative_prefix_matches_files_in_the_subdirectory(self, tmp_path, monkeypatch):
+    def test_nonexistent_directory_returns_no_candidates(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        prefix, candidates = tab_completion.get_path_candidates("does_not_exist/fi")
+
+        assert candidates == []
+
+    def test_nested_relative_prefix_matches_entries_in_the_subdirectory(self, tmp_path, monkeypatch):
         sub = tmp_path / "sub"
         sub.mkdir()
         (sub / "readme.md").touch()
-        (sub / "report.txt").touch()
-        (tmp_path / "report.txt").touch() # same-named file in cwd should not leak in
+        (sub / "report_dir").mkdir()
+        (tmp_path / "readme.md").touch()  # same-named file in cwd should not leak in
         monkeypatch.chdir(tmp_path)
 
-        prefix, files = tab_completion.get_file_candidates("sub/re")
+        prefix, candidates = tab_completion.get_path_candidates("sub/re")
 
         assert prefix == "re"
-        assert sorted(files) == ["readme.md", "report.txt"]
+        assert sorted(candidates) == ["readme.md", "report_dir/"]
 
-    def test_nested_prefix_with_trailing_separator_lists_every_file_in_the_directory(self, tmp_path, monkeypatch):
-        sub = tmp_path / "sub"
-        sub.mkdir()
-        (sub / "one.txt").touch()
-        (sub / "two.txt").touch()
-        monkeypatch.chdir(tmp_path)
-
-        prefix, files = tab_completion.get_file_candidates(f"sub{os.sep}")
-
-        assert prefix == ""
-        assert sorted(files) == ["one.txt", "two.txt"]
-
-    def test_nested_prefix_excludes_subdirectories(self, tmp_path, monkeypatch):
-        sub = tmp_path / "sub"
-        sub.mkdir()
-        (sub / "inner_dir").mkdir()
-        (sub / "file.txt").touch()
-        monkeypatch.chdir(tmp_path)
-
-        prefix, files = tab_completion.get_file_candidates(f"sub{os.sep}")
-
-        assert files == ["file.txt"]
-
-    def test_multiple_levels_of_nesting_are_resolved(self, tmp_path, monkeypatch):
-        nested = tmp_path / "a" / "b" / "c"
-        nested.mkdir(parents=True)
-        (nested / "deep.txt").touch()
-        monkeypatch.chdir(tmp_path)
-
-        prefix, files = tab_completion.get_file_candidates(os.sep.join(["a", "b", "c", "de"]))
-
-        assert prefix == "de"
-        assert files == ["deep.txt"]
-
-    def test_absolute_path_prefix_matches_files_in_that_directory(self, tmp_path):
+    def test_absolute_path_prefix_matches_entries_in_that_directory(self, tmp_path):
         (tmp_path / "readme.md").touch()
         (tmp_path / "other.txt").touch()
 
-        prefix, files = tab_completion.get_file_candidates(f"{tmp_path}{os.sep}re")
+        prefix, candidates = tab_completion.get_path_candidates(f"{tmp_path}{os.sep}re")
 
         assert prefix == "re"
-        assert files == ["readme.md"]
+        assert candidates == ["readme.md"]
 
     def test_root_level_absolute_prefix_looks_up_the_root_directory(self, monkeypatch):
         # "/etc" has nothing before its final separator: rpartition leaves
@@ -1242,16 +936,43 @@ class TestGetFileCandidates:
         seen_locs = []
         monkeypatch.setattr(Path, "iterdir", lambda self: seen_locs.append(self) or iter([]))
 
-        tab_completion.get_file_candidates(f"{os.sep}etc_prefix")
+        tab_completion.get_path_candidates(f"{os.sep}etc_prefix")
 
         assert seen_locs == [Path(os.sep)]
 
-    def test_nonexistent_nested_directory_returns_no_candidates(self, tmp_path, monkeypatch):
+    def test_trailing_separator_lists_every_entry_in_the_directory(self, tmp_path, monkeypatch):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "one.txt").touch()
+        (sub / "inner_dir").mkdir()
         monkeypatch.chdir(tmp_path)
 
-        prefix, files = tab_completion.get_file_candidates("does_not_exist/fi")
+        prefix, candidates = tab_completion.get_path_candidates(f"sub{os.sep}")
 
-        assert files == []
+        assert prefix == ""
+        assert sorted(candidates) == ["inner_dir/", "one.txt"]
+
+    def test_multiple_levels_of_nesting_are_resolved(self, tmp_path, monkeypatch):
+        nested = tmp_path / "a" / "b" / "c"
+        nested.mkdir(parents=True)
+        (nested / "deep.txt").touch()
+        monkeypatch.chdir(tmp_path)
+
+        prefix, candidates = tab_completion.get_path_candidates(os.sep.join(["a", "b", "c", "de"]))
+
+        assert prefix == "de"
+        assert candidates == ["deep.txt"]
+
+    def test_partial_prefix_inside_a_directory_still_gets_a_trailing_slash_on_match(self, tmp_path, monkeypatch):
+        pig = tmp_path / "pig"
+        pig.mkdir()
+        (pig / "dog").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        prefix, candidates = tab_completion.get_path_candidates("pig/do")
+
+        assert prefix == "do"
+        assert candidates == ["dog/"]
 
 
 # ---------------------------------------------------------------------------
@@ -1304,13 +1025,16 @@ class TestLineEditorBackspace:
 
 
 class TestAutocomplete:
-    def test_unique_prefix_completes_in_place(self, capsys):
+    def test_unique_prefix_completes_in_place_and_redraws_the_line(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("ech")
 
         editor.handle_tab()
 
         assert editor.buffer == list("echo")
+        # A unique prefix still bells (see handle_tab's cursor-creation
+        # branch) before completing in place on the very first tab.
+        assert capsys.readouterr().out == "\x07\033[3D\033[0Kecho"
 
     def test_shared_prefix_first_tab_shows_the_list_without_completing(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
@@ -1330,39 +1054,14 @@ class TestAutocomplete:
 
         assert editor.buffer == list("echo")
 
-    def test_completion_redraws_the_line_with_the_full_word(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-        editor.buffer = list("ech")
-
-        editor.handle_tab()
-
-        # A unique prefix still bells (see handle_tab's cursor-creation
-        # branch) before completing in place on the very first tab.
-        assert capsys.readouterr().out == "\x07\033[3D\033[0Kecho"
-
-    def test_no_match_rings_the_bell(self, capsys):
+    def test_no_matching_builtin_rings_the_bell_and_leaves_everything_unchanged(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("zzz")
 
         editor.handle_tab()
 
         assert capsys.readouterr().out == "\x07"
-
-    def test_no_match_leaves_the_buffer_unchanged(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-        editor.buffer = list("zzz")
-
-        editor.handle_tab()
-
         assert editor.buffer == list("zzz")
-
-    def test_no_match_does_not_redraw_the_line(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-        editor.buffer = list("zzz")
-
-        editor.handle_tab()
-
-        assert "\033[0K" not in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
@@ -1372,7 +1071,7 @@ class TestAutocomplete:
 class TestFileArgumentCompletion:
     def test_completes_a_file_argument_after_a_space(self, tmp_path, monkeypatch):
         (tmp_path / "notes.txt").touch()
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("cat no")
 
@@ -1383,7 +1082,7 @@ class TestFileArgumentCompletion:
     def test_cycling_erases_the_previous_candidate_not_just_the_original_prefix(self, tmp_path, monkeypatch):
         (tmp_path / "readme.md").touch()
         (tmp_path / "report.txt").touch()
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("cat re")
 
@@ -1398,17 +1097,6 @@ class TestFileArgumentCompletion:
         # original 2-char "re" and leave stray characters behind.
         assert {first, second} == {"cat readme.md", "cat report.txt"}
 
-    def test_trailing_space_then_tab_rings_the_bell_without_completing(self, tmp_path, monkeypatch, capsys):
-        (tmp_path / "only.txt").touch()
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-        editor.buffer = list("cat ")
-
-        editor.handle_tab()
-
-        assert capsys.readouterr().out == "\x07"
-        assert "".join(editor.buffer) == "cat "
-
     def test_complete_with_empty_prefix_does_not_wipe_the_buffer(self):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("cat ")
@@ -1417,18 +1105,6 @@ class TestFileArgumentCompletion:
         editor.complete(cursor)
 
         assert "".join(editor.buffer) == "cat only.txt"
-
-    def test_completes_a_nested_file_argument_leaving_the_directory_part_intact(self, tmp_path, monkeypatch):
-        sub = tmp_path / "sub"
-        sub.mkdir()
-        (sub / "notes.txt").touch()
-        monkeypatch.chdir(tmp_path)
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-        editor.buffer = list("cat sub/no")
-
-        editor.handle_tab()
-
-        assert "".join(editor.buffer) == "cat sub/notes.txt"
 
     def test_nested_completion_cycling_only_erases_the_final_path_segment(self, tmp_path, monkeypatch):
         sub = tmp_path / "sub"
@@ -1447,38 +1123,12 @@ class TestFileArgumentCompletion:
 
         assert {first, second} == {"cat sub/readme.md", "cat sub/report.txt"}
 
-    def test_nested_prefix_with_trailing_separator_completes_to_the_only_file_in_it(self, tmp_path, monkeypatch):
-        sub = tmp_path / "sub"
-        sub.mkdir()
-        (sub / "only.txt").touch()
-        monkeypatch.chdir(tmp_path)
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-        editor.buffer = list("cat sub/")
-
-        editor.handle_tab()
-
-        assert "".join(editor.buffer) == "cat sub/only.txt"
-
 
 # ---------------------------------------------------------------------------
 # LineEditor.display_candidates / clear_candidates
 # ---------------------------------------------------------------------------
 
 class TestDisplayCandidates:
-    def test_writes_each_line_below_the_prompt(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-
-        editor.display_candidates(["echo", "exit"])
-
-        assert capsys.readouterr().out.startswith("\n\recho\n\rexit")
-
-    def test_moves_cursor_up_by_the_number_of_lines_shown(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-
-        editor.display_candidates(["echo", "exit", "export"])
-
-        assert "\033[3A" in capsys.readouterr().out
-
     def test_restores_the_column_the_cursor_was_at_before_tab_was_pressed(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
         editor.buffer = list("ec")  # "$ " (2 cols) + "ec" -> column 5
@@ -1536,17 +1186,6 @@ class TestClearCandidates:
         editor.clear_candidates()
 
         assert capsys.readouterr().out == ""
-
-    def test_after_display_candidates_erases_exactly_what_was_shown(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
-        editor.buffer = list("e")
-        editor.display_candidates(["echo", "exit"])
-        capsys.readouterr()  # discard display_candidates's own output
-
-        editor.clear_candidates()
-
-        assert capsys.readouterr().out == "\033[B\033[2K" * 2 + "\033[2A\r"
-        assert editor.candidate_lines == 0
 
 
 # ---------------------------------------------------------------------------

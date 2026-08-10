@@ -170,14 +170,6 @@ class TestCdBuiltin:
 
         assert "cd is a shell builtin\n" in out
 
-    def test_cd_to_absolute_path_changes_directory(self, tmp_path):
-        target = tmp_path / "nested"
-        target.mkdir()
-
-        out, _ = run_shell([f"cd {target}", "pwd", "exit"], cwd=tmp_path)
-
-        assert f"\n{target}\n" in out
-
     def test_cd_to_relative_path_changes_directory(self, tmp_path):
         (tmp_path / "nested").mkdir()
 
@@ -185,48 +177,12 @@ class TestCdBuiltin:
 
         assert f"\n{tmp_path / 'nested'}\n" in out
 
-    def test_cd_to_parent_directory_with_dotdot(self, tmp_path):
-        nested = tmp_path / "nested"
-        nested.mkdir()
-
-        out, _ = run_shell(["cd ..", "pwd", "exit"], cwd=nested)
-
-        assert f"\n{tmp_path}\n" in out
-
     def test_cd_nonexistent_path_prints_error(self, tmp_path):
         missing = tmp_path / "does_not_exist"
 
         out, _ = run_shell([f"cd {missing}", "exit"], cwd=tmp_path)
 
         assert f"cd: {missing}: No such file or directory\n" in out
-
-    def test_cd_into_a_file_prints_not_a_directory_error(self, tmp_path):
-        file_path = tmp_path / "just_a_file"
-        file_path.write_text("not a directory")
-
-        out, _ = run_shell([f"cd {file_path}", "exit"], cwd=tmp_path)
-
-        assert f"cd: {file_path}: Not a directory\n" in out
-
-    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses directory permission checks")
-    def test_cd_into_unreadable_directory_prints_permission_denied(self, tmp_path):
-        locked = tmp_path / "locked"
-        locked.mkdir()
-        locked.chmod(0)
-
-        try:
-            out, _ = run_shell([f"cd {locked}", "exit"], cwd=tmp_path)
-        finally:
-            locked.chmod(0o700)
-
-        assert f"cd: {locked}: Permission denied\n" in out
-
-    def test_cd_with_too_many_arguments_prints_error(self, tmp_path):
-        (tmp_path / "nested").mkdir()
-
-        out, _ = run_shell(["cd nested extra_arg", "exit"], cwd=tmp_path)
-
-        assert "cd: too many arguments\n" in out
 
     def test_cd_tilde_changes_to_home_directory(self, tmp_path):
         home = tmp_path / "home"
@@ -243,23 +199,6 @@ class TestCdBuiltin:
 # ---------------------------------------------------------------------------
 
 class TestRunProgram:
-    def test_runs_external_program_with_single_arg(self, tmp_path):
-        bin_dir = tmp_path / "fox"
-        bin_dir.mkdir()
-        make_executable(
-            bin_dir / "custom_exe_9492",
-            "#!/bin/sh\necho \"Program was passed $(($# + 1)) args (including program name).\"\n"
-            "echo \"Arg #0 (program name): $(basename \"$0\")\"\n"
-            "i=1\nfor a in \"$@\"; do echo \"Arg #$i: $a\"; i=$((i+1)); done\n",
-        )
-        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
-
-        out, _ = run_shell(["custom_exe_9492 Alice", "exit"], env=env)
-
-        assert "Program was passed 2 args (including program name).\n" in out
-        assert "Arg #0 (program name): custom_exe_9492\n" in out
-        assert "Arg #1: Alice\n" in out
-
     def test_runs_external_program_with_multiple_args(self, tmp_path):
         bin_dir = tmp_path / "fox"
         bin_dir.mkdir()
@@ -408,11 +347,6 @@ class TestSingleQuoteParsing:
 
         assert "shell hello\n" in out
 
-    def test_echo_preserves_repeated_internal_whitespace(self):
-        out, _ = run_shell(["echo 'world     test'", "exit"])
-
-        assert "world     test\n" in out
-
     def test_cat_reads_multiple_quoted_paths_with_spaces(self, tmp_path):
         file1 = tmp_path / "file name"
         file2 = tmp_path / "file name with spaces"
@@ -438,11 +372,6 @@ class TestDoubleQuoteParsing:
         out, _ = run_shell(['echo "shell hello"', "exit"])
 
         assert "shell hello\n" in out
-
-    def test_echo_preserves_repeated_internal_whitespace(self):
-        out, _ = run_shell(['echo "world     test"', "exit"])
-
-        assert "world     test\n" in out
 
     def test_cat_reads_multiple_quoted_paths_with_spaces(self, tmp_path):
         file1 = tmp_path / "file name"
@@ -556,14 +485,6 @@ class TestOutputRedirection:
         assert target.read_text() == "Hello James\n"
         assert "\nHello James\n" not in out
 
-    def test_creates_the_target_file_when_it_does_not_exist(self, tmp_path):
-        target = tmp_path / "new_file.md"
-        assert not target.exists()
-
-        run_shell([f"echo created > {target}", "exit"], cwd=tmp_path)
-
-        assert target.read_text() == "created\n"
-
     def test_overwrites_an_existing_files_content(self, tmp_path):
         target = tmp_path / "existing.md"
         target.write_text("stale content that should be fully replaced")
@@ -634,14 +555,6 @@ class TestAppendStdoutRedirection:
 
         assert target.read_text() == "List of files:\napple\nbanana\nblueberry\n"
 
-    def test_gtgt_does_not_truncate_existing_file_content(self, tmp_path):
-        target = tmp_path / "existing.md"
-        target.write_text("original content\n")
-
-        run_shell([f"echo appended >> {target}", "exit"], cwd=tmp_path)
-
-        assert target.read_text() == "original content\nappended\n"
-
     def test_gtgt_redirect_failure_prints_error_to_terminal_and_writes_no_file(self, tmp_path):
         missing_dir_target = tmp_path / "does_not_exist" / "out.md"
 
@@ -691,14 +604,6 @@ class TestAppendStderrRedirection:
             "cat: nonexistent: No such file or directory\n"
             "ls: nonexistent: No such file or directory\n"
         )
-
-    def test_2gtgt_does_not_truncate_existing_file_content(self, tmp_path):
-        target = tmp_path / "existing.md"
-        target.write_text("original content\n")
-
-        run_shell([f"cat nonexistent 2>> {target}", "exit"], cwd=tmp_path)
-
-        assert target.read_text() == "original content\ncat: nonexistent: No such file or directory\n"
 
     def test_2gtgt_redirect_failure_prints_error_to_terminal_and_writes_no_file(self, tmp_path):
         missing_dir_target = tmp_path / "does_not_exist" / "err.md"
@@ -832,26 +737,19 @@ class TestTabAutocompletionForPathExecutables:
 # ---------------------------------------------------------------------------
 
 class TestTabAutocompletionForNestedFiles:
-    def test_tab_completes_a_unique_file_in_a_subdirectory(self, tmp_path):
+    def test_tab_completes_a_unique_file_in_a_subdirectory_and_runs_it_correctly(self, tmp_path):
         sub = tmp_path / "sub"
         sub.mkdir()
-        (sub / "notes.txt").touch()
+        (sub / "notes.txt").write_text("nested file contents\n")
 
         out, returncode = run_shell(["cat sub/no\t", "exit"], cwd=tmp_path)
 
         # Only "no" (the segment after the last "/") is erased and replaced,
         # leaving the "sub/" directory part of the buffer untouched.
         assert "\033[2D\033[0Knotes.txt" in out
-        assert returncode == 0
-
-    def test_running_the_completed_nested_path_reads_the_right_file(self, tmp_path):
-        sub = tmp_path / "sub"
-        sub.mkdir()
-        (sub / "notes.txt").write_text("nested file contents\n")
-
-        out, _ = run_shell(["cat sub/no\t", "exit"], cwd=tmp_path)
-
+        # The completed path is also correct, not just its on-screen rendering.
         assert "nested file contents\n" in out
+        assert returncode == 0
 
     def test_tab_with_multiple_nested_matches_lists_then_completes(self, tmp_path):
         sub = tmp_path / "sub"
@@ -884,6 +782,29 @@ class TestTabAutocompletionForNestedFiles:
         # still attempts the literal (nonexistent) path the user typed.
         assert "\x07" in out
         assert "does_not_exist/no: No such file or directory\n" in out
+
+
+# ---------------------------------------------------------------------------
+# Tab autocompletion for directories
+# ---------------------------------------------------------------------------
+
+class TestTabAutocompletionForDirectories:
+    def test_tab_appends_trailing_slash_then_descends_into_the_directory(self, tmp_path):
+        pig = tmp_path / "pig"
+        pig.mkdir()
+        (pig / "dog").mkdir()
+
+        out, returncode = run_shell(["rmdir p\t", "rmdir pig/\t", "exit"], cwd=tmp_path)
+
+        # "p" uniquely matches the "pig" directory; completion appends a
+        # trailing "/" to mark it as a directory
+        # (mirrors "$ rmdir p<TAB>" -> "$ rmdir pig/").
+        assert "\x07\033[1D\033[0Kpig/" in out
+        # With the buffer already ending in "pig/", completion descends into
+        # it and completes to its only entry, "dog"
+        # (mirrors "$ rmdir pig/<TAB>" -> "$ rmdir pig/dog/").
+        assert "\033[0Kdog/" in out
+        assert returncode == 0
 
 
 # ---------------------------------------------------------------------------

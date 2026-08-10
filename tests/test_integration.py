@@ -667,9 +667,9 @@ class TestTabAutocompletion:
         # and Enter - so the executed command is "echo hi", not "ec hi".
         out, _ = run_shell(["ec\t hi", "exit"])
 
-        # A unique match still bells (see handle_tab's cursor-creation
-        # branch) even though it completes immediately with no list shown.
-        assert "\x07\033[2D\033[0Kecho" in out
+        # A unique match completes immediately with no bell and no list -
+        # its longest common prefix is the whole match, so nothing's ambiguous.
+        assert "\033[2D\033[0Kecho" in out
         assert "hi\n" in out
 
     def test_tab_with_no_matching_builtin_rings_the_bell_and_leaves_the_buffer_untouched(self):
@@ -796,10 +796,10 @@ class TestTabAutocompletionForDirectories:
 
         out, returncode = run_shell(["rmdir p\t", "rmdir pig/\t", "exit"], cwd=tmp_path)
 
-        # "p" uniquely matches the "pig" directory; completion appends a
-        # trailing "/" to mark it as a directory
+        # "p" uniquely matches the "pig" directory; completion silently
+        # appends a trailing "/" to mark it as a directory, no bell needed
         # (mirrors "$ rmdir p<TAB>" -> "$ rmdir pig/").
-        assert "\x07\033[1D\033[0Kpig/" in out
+        assert "\033[1D\033[0Kpig/" in out
         # With the buffer already ending in "pig/", completion descends into
         # it and completes to its only entry, "dog"
         # (mirrors "$ rmdir pig/<TAB>" -> "$ rmdir pig/dog/").

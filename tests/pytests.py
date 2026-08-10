@@ -889,7 +889,7 @@ class TestGetPathCandidates:
         prefix, candidates = tab_completion.get_path_candidates("report")
 
         assert prefix == "report"
-        assert sorted(candidates) == ["report.txt", "report_dir/"]
+        assert sorted(candidates) == ["report.txt ", "report_dir/"]
 
     def test_empty_prefix_returns_no_candidates(self, tmp_path, monkeypatch):
         (tmp_path / "anything.txt").touch()
@@ -918,7 +918,7 @@ class TestGetPathCandidates:
         prefix, candidates = tab_completion.get_path_candidates("sub/re")
 
         assert prefix == "re"
-        assert sorted(candidates) == ["readme.md", "report_dir/"]
+        assert sorted(candidates) == ["readme.md ", "report_dir/"]
 
     def test_absolute_path_prefix_matches_entries_in_that_directory(self, tmp_path):
         (tmp_path / "readme.md").touch()
@@ -927,7 +927,7 @@ class TestGetPathCandidates:
         prefix, candidates = tab_completion.get_path_candidates(f"{tmp_path}{os.sep}re")
 
         assert prefix == "re"
-        assert candidates == ["readme.md"]
+        assert candidates == ["readme.md "]
 
     def test_root_level_absolute_prefix_looks_up_the_root_directory(self, monkeypatch):
         # "/etc" has nothing before its final separator: rpartition leaves
@@ -950,7 +950,7 @@ class TestGetPathCandidates:
         prefix, candidates = tab_completion.get_path_candidates(f"sub{os.sep}")
 
         assert prefix == ""
-        assert sorted(candidates) == ["inner_dir/", "one.txt"]
+        assert sorted(candidates) == ["inner_dir/", "one.txt "]
 
     def test_multiple_levels_of_nesting_are_resolved(self, tmp_path, monkeypatch):
         nested = tmp_path / "a" / "b" / "c"
@@ -961,7 +961,7 @@ class TestGetPathCandidates:
         prefix, candidates = tab_completion.get_path_candidates(os.sep.join(["a", "b", "c", "de"]))
 
         assert prefix == "de"
-        assert candidates == ["deep.txt"]
+        assert candidates == ["deep.txt "]
 
     def test_partial_prefix_inside_a_directory_still_gets_a_trailing_slash_on_match(self, tmp_path, monkeypatch):
         pig = tmp_path / "pig"
@@ -1032,9 +1032,10 @@ class TestAutocomplete:
         editor.handle_tab()
 
         assert editor.buffer == list("echo")
-        # A unique prefix still bells (see handle_tab's cursor-creation
-        # branch) before completing in place on the very first tab.
-        assert capsys.readouterr().out == "\x07\033[3D\033[0Kecho"
+        # A unique prefix completes silently in place on the very first tab -
+        # its longest common prefix is the whole match, so there's nothing
+        # ambiguous left to bell about.
+        assert capsys.readouterr().out == "\033[3D\033[0Kecho"
 
     def test_shared_prefix_first_tab_shows_the_list_without_completing(self, capsys):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
@@ -1077,7 +1078,7 @@ class TestFileArgumentCompletion:
 
         editor.handle_tab()
 
-        assert "".join(editor.buffer) == "cat notes.txt"
+        assert "".join(editor.buffer) == "cat notes.txt "
 
     def test_cycling_erases_the_previous_candidate_not_just_the_original_prefix(self, tmp_path, monkeypatch):
         (tmp_path / "readme.md").touch()
@@ -1095,7 +1096,7 @@ class TestFileArgumentCompletion:
         # Regression check: if cursor.prefix weren't updated to the previous
         # candidate after each completion, this cycle would only erase the
         # original 2-char "re" and leave stray characters behind.
-        assert {first, second} == {"cat readme.md", "cat report.txt"}
+        assert {first, second} == {"cat readme.md ", "cat report.txt "}
 
     def test_complete_with_empty_prefix_does_not_wipe_the_buffer(self):
         editor = line_editor.LineEditor(BUILTIN_CHOICES)
@@ -1121,7 +1122,7 @@ class TestFileArgumentCompletion:
         editor.handle_tab()  # cycles to the other match, without duplicating "sub/"
         second = "".join(editor.buffer)
 
-        assert {first, second} == {"cat sub/readme.md", "cat sub/report.txt"}
+        assert {first, second} == {"cat sub/readme.md ", "cat sub/report.txt "}
 
 
 # ---------------------------------------------------------------------------

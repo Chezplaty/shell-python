@@ -1,6 +1,6 @@
 import sys
 
-from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_path_candidates, bell
+from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_path_candidates, longest_common_prefix, bell
 
 def redraw(output: str, prefix: str) -> None:
     """
@@ -97,7 +97,6 @@ class LineEditor:
     def handle_tab(self) -> None:
         """
         Advances the tab-completion state machine for the current buffer.
-        Lists candidates on first ambiguous tab, then cycles through them.
         """
         #TODO: print tab for empty buffer
         if not self.buffer:
@@ -105,24 +104,56 @@ class LineEditor:
             return
 
         if self.tab_cursor is None:
-            prefix = "".join(self.buffer)
-            before, sep, prefix = prefix.rpartition(" ")
-            if sep: #if there is a space
-                prefix, candidates = get_path_candidates(prefix)
-            else:
-                candidates = get_candidates(self.choices, prefix)
-
-            if not candidates:
-                bell()
+            if not self.start_completion(): # builds candidates for the current word; bails if none match
                 return
-
-            self.tab_cursor = CandidateCursor(candidates, prefix)
+            if self.extend_to_lcp(self.tab_cursor): # silently fills in text every candidate shares
+                return
             bell()
 
-        cursor = self.tab_cursor
+        self.list_or_cycle(self.tab_cursor) # lists candidates once, then cycles through them
+
+    def start_completion(self) -> bool:
+        """
+        Gathers candidates for the word under the cursor and starts a new
+        CandidateCursor for them. Returns False if there's nothing to complete.
+        """
+        prefix = "".join(self.buffer)
+        before, sep, prefix = prefix.rpartition(" ")
+        if sep: #if there is a space
+            prefix, candidates = get_path_candidates(prefix)
+        else:
+            candidates = get_candidates(self.choices, prefix)
+
+        if not candidates:
+            bell()
+            return False
+
+        self.tab_cursor = CandidateCursor(candidates, prefix)
+        return True
+
+    def extend_to_lcp(self, cursor: CandidateCursor) -> bool:
+        """
+        Fills in the longest text shared by every candidate, if it's more
+        than what's already typed. Rings the bell if candidates are still
+        ambiguous after extending.
+        """
+        lcp = longest_common_prefix(cursor.candidates)
+        if len(lcp) <= len(cursor.prefix):
+            return False
+
+        self.replace_current(cursor, lcp)
+        if len(cursor.candidates) > 1:
+            bell()
+        return True
+
+    def list_or_cycle(self, cursor: CandidateCursor) -> None:
+        """
+        Lists all candidates the first time they're still ambiguous,
+        then cycles through them one at a time on every press after that.
+        """
         if not cursor.listed and len(cursor.candidates) > 1:
 
-            if self.candidate_lines: #if anything from beofre displayed, clear it
+            if self.candidate_lines: #if anything from before displayed, clear it
                 self.clear_candidates()
 
             self.display_candidates(format_candidates(cursor.candidates))
@@ -135,12 +166,14 @@ class LineEditor:
         Swaps the cursor's currently displayed word for its next candidate,
         on screen and in the buffer.
         """
-        candidate = cursor.next()
+        self.replace_current(cursor, cursor.next())
+
+    def replace_current(self, cursor: CandidateCursor, candidate: str):
         redraw(candidate, cursor.prefix)
 
         if cursor.prefix:
             del self.buffer[-len(cursor.prefix):] #delete prefix from buffer
-            
+
         self.buffer.extend(candidate)
         cursor.prefix = candidate
 

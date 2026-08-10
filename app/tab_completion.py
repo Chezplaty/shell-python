@@ -118,14 +118,11 @@ def get_path_candidates(prefix: str) -> tuple[str, list[str]]:
     if not prefix:
         return prefix, []
 
-
-    path = Path(prefix)
-    loc, prefix = path.parent, path.name
-
+    loc, prefix = os.path.split(prefix)
     paths = []
 
     try:
-        for entry in loc.iterdir():
+        for entry in Path(loc).iterdir():
             if entry.exists() and entry.name.startswith(prefix):
                 name = shlex.quote(entry.name)
                 if entry.is_dir():
@@ -133,7 +130,7 @@ def get_path_candidates(prefix: str) -> tuple[str, list[str]]:
                 paths.append(name)
     except OSError: # loc is not a direc or cant be accessed
         pass
-    return prefix, paths #prefix might change, return it
+    return prefix, sorted(paths) #prefix might change, return it
 
 
 def bell() -> None:

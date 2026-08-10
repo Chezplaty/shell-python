@@ -5,6 +5,12 @@ from app.path_utils import get_executable
 from app.errors import BuiltinError
 from app.parser import Instruction
 
+def handle_complete(instruction: Instruction):
+    args = instruction.args
+
+    if args[0] == "-p":
+        raise BuiltinError(instruction.cmd, f"{args[1]}: no completion specification")
+
 def handle_cd(instruction: Instruction) -> None:
     """
     Checks if given directory exists.
@@ -66,4 +72,4 @@ BUILTINS = {"exit": None,
             "type": handle_type,
             "pwd": handle_pwd,
             "cd": handle_cd,
-            "complete": None}
+            "complete": handle_complete}

@@ -168,7 +168,11 @@ class LineEditor:
         """
         self.replace_current(cursor, cursor.next())
 
-    def replace_current(self, cursor: CandidateCursor, candidate: str):
+    def replace_current(self, cursor: CandidateCursor, candidate: str) -> None:
+        """
+        Replaces the current completion prefix with the given candidate.
+        Updates both the terminal display and the input buffer accordingly.
+        """
         redraw(candidate, cursor.prefix)
 
         if cursor.prefix:

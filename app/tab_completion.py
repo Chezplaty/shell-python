@@ -125,12 +125,14 @@ def get_path_candidates(prefix: str) -> tuple[str, list[str]]:
         for entry in Path(loc).iterdir():
             if entry.exists() and entry.name.startswith(prefix):
                 name = shlex.quote(entry.name)
-                if entry.is_dir():
-                    name += '/'
+                name += '/' if entry.is_dir() else ' ' #add slash for direcs, space for files
                 paths.append(name)
     except OSError: # loc is not a direc or cant be accessed
         pass
     return prefix, sorted(paths) #prefix might change, return it
+
+def longest_common_prefix(candidates: list[str]):
+    return os.path.commonprefix(candidates)
 
 
 def bell() -> None:

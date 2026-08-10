@@ -65,4 +65,5 @@ BUILTINS = {"exit": None,
             "echo": handle_echo,
             "type": handle_type,
             "pwd": handle_pwd,
-            "cd": handle_cd}
+            "cd": handle_cd,
+            "complete": None}

@@ -104,9 +104,9 @@ class LineEditor:
             return
 
         if self.tab_cursor is None:
-            if not self.start_completion(): # builds candidates for the current word; bails if none match
+            if not self.start_completion(): # builds candidates for the current word; return if no candidates
                 return
-            if self.extend_to_lcp(self.tab_cursor): # silently fills in text every candidate shares
+            if self.extend_to_lcp(self.tab_cursor): # extends to longest prefix if True, skip list/cycle
                 return
             bell()
 

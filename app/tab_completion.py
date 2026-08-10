@@ -114,10 +114,6 @@ def get_path_candidates(prefix: str) -> tuple[str, list[str]]:
     Also returns the (possibly narrowed) prefix, since completion only ever replaces that final segment.
     """
 
-    #TODO: if prefix is empty, list all the directories in the cwd
-    if not prefix:
-        return prefix, []
-
     loc, prefix = os.path.split(prefix)
     paths = []
 

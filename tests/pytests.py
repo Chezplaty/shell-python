@@ -891,14 +891,15 @@ class TestGetPathCandidates:
         assert prefix == "report"
         assert sorted(candidates) == ["report.txt ", "report_dir/"]
 
-    def test_empty_prefix_returns_no_candidates(self, tmp_path, monkeypatch):
+    def test_empty_prefix_lists_entries_in_the_cwd(self, tmp_path, monkeypatch):
         (tmp_path / "anything.txt").touch()
+        (tmp_path / "anything_dir").mkdir()
         monkeypatch.chdir(tmp_path)
 
         prefix, candidates = tab_completion.get_path_candidates("")
 
         assert prefix == ""
-        assert candidates == []
+        assert sorted(candidates) == ["anything.txt ", "anything_dir/"]
 
     def test_nonexistent_directory_returns_no_candidates(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)

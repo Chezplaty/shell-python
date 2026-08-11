@@ -2,7 +2,6 @@ import subprocess
 from typing import IO
 
 from app.path_utils import get_executable
-from app.shell_builtins import BUILTINS
 from app.redirects import open_redirects, redirected_fds
 from app.parser import Instruction
 
@@ -20,14 +19,14 @@ def handle_external_programs(cmd: str, args: list[str], files: dict[int, IO]) ->
     else:
         print(f"{cmd}: command not found")
 
-def handle_command(instruction: Instruction) -> None:
+def handle_command(instruction: Instruction, builtins: dict[str, function]) -> None:
     """
     Runs a single parsed command.
     Any redirects on the command are set up first so output goes to the right place.
     """
 
     with open_redirects(instruction) as files:
-        handler = BUILTINS.get(instruction.cmd, "")
+        handler = builtins.get(instruction.cmd, "")
         if handler:
             #change fds (rewire std outputs) if needed
             with redirected_fds(files):

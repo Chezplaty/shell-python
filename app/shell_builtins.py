@@ -5,11 +5,22 @@ from app.path_utils import get_executable
 from app.errors import BuiltinError
 from app.parser import Instruction
 
-def handle_complete(instruction: Instruction):
-    args = instruction.args
+#TODO: create class to hold all completer scripts in a session
+class CompleteManager:
+    def __init__(self):
+        self.scripts = {}
 
-    if args[0] == "-p":
-        raise BuiltinError(instruction.cmd, f"{args[1]}: no completion specification")
+    def handle_complete(self, instruction: Instruction):
+        args = instruction.args
+        flag = args[0]
+
+        if flag == "-p":
+            raise BuiltinError(instruction.cmd, f"{args[1]}: no completion specification")
+
+        elif flag == "-C":
+            script = args[1]
+            command = args[2]
+
 
 def handle_cd(instruction: Instruction) -> None:
     """
@@ -48,7 +59,7 @@ def handle_type(instruction: Instruction) -> None:
     """
 
     for cmd in instruction.args:
-        if cmd in BUILTINS:
+        if cmd in BUILTIN_NAMES:
             print(f"{cmd} is a shell builtin")
             continue
 
@@ -67,9 +78,11 @@ def handle_echo(instruction: Instruction) -> None:
 
     print(" ".join(instruction.args))
 
-BUILTINS = {"exit": None,
-            "echo": handle_echo,
-            "type": handle_type,
-            "pwd": handle_pwd,
-            "cd": handle_cd,
-            "complete": handle_complete}
+BUILTIN_NAMES = {
+    "exit",
+    "echo",
+    "type",
+    "pwd",
+    "cd",
+    "complete",
+}

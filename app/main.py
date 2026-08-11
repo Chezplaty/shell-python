@@ -6,6 +6,14 @@ from app.lexer import Lexer
 from app.line_editor import LineEditor
 from app.tab_completion import compile_choices
 from app.parser import parse
+from app.shell_builtins import (
+    CompleteManager,
+    handle_cd,
+    handle_echo,
+    handle_pwd,
+    handle_type,
+)
+
 
 from contextlib import contextmanager
 import tty
@@ -32,6 +40,14 @@ def main():
     Continuously prompts the user for input until the exit command is received.
     """
     choices = compile_choices()
+    complete_manager = CompleteManager()
+
+    builtins = {"exit": None,
+                "echo": handle_echo,
+                "type": handle_type,
+                "pwd": handle_pwd,
+                "cd": handle_cd,
+                "complete": complete_manager.handle_complete}
 
     while True:
         with set_cbreak_mode():
@@ -57,7 +73,7 @@ def main():
             break
 
         try:
-            handle_command(instruction)
+            handle_command(instruction, builtins)
         except BuiltinError as e:
             print(e)
 

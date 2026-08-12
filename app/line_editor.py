@@ -1,4 +1,8 @@
 import sys
+import subprocess
+
+import os
+
 
 from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_path_candidates, longest_common_prefix, bell
 
@@ -106,8 +110,14 @@ class LineEditor:
 
         #TODO: check for command name followed by space, check if it has a completer
         prefix = "".join(self.buffer)
-        before, sep, prefix = prefix.rpartition(" ")
+        command, sep, prefix = prefix.rpartition(" ")
+        
         if sep: #if there is a space
+            if command in self.paths: #run the script
+                path = self.paths[command]
+                os.chmod(path, os.stat(path).st_mode | 0o111)
+                output = subprocess.run([path], capture_output=True, text=True)
+                print(output)
 
         if self.tab_cursor is None:
             if not self.start_completion(): # builds candidates for the current word; return if no candidates

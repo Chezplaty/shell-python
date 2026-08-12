@@ -8,18 +8,25 @@ from app.parser import Instruction
 #TODO: create class to hold all completer scripts in a session
 class CompleteManager:
     def __init__(self):
-        self.scripts = {}
+        self.paths = {}
 
     def handle_complete(self, instruction: Instruction):
         args = instruction.args
         flag = args[0]
 
         if flag == "-p":
-            raise BuiltinError(instruction.cmd, f"{args[1]}: no completion specification")
+            command = args[1]
+            try:
+                path = self.paths[command]
+                print(f"complete -C '{path}' {command}")
+            except Exception:
+                raise BuiltinError(instruction.cmd, f"{args[1]}: no completion specification")
 
         elif flag == "-C":
-            script = args[1]
+            path = args[1]
             command = args[2]
+            self.paths[command] = path
+
 
 
 def handle_cd(instruction: Instruction) -> None:

@@ -14,7 +14,6 @@ from app.shell_builtins import (
     handle_type,
 )
 
-
 from contextlib import contextmanager
 import tty
 import termios

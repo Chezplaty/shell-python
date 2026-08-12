@@ -5,7 +5,7 @@ import math
 import shutil
 import shlex
 
-from app.shell_builtins import BUILTINS
+from app.shell_builtins import BUILTIN_NAMES
 
 class CandidateCursor:
     """Cycles through tab-completion candidates for a single prefix."""
@@ -71,7 +71,7 @@ def compile_choices() -> list[str]:
         except OSError: #skip unreadable directories/files
             pass
 
-    choices.update(BUILTINS) #add builtins
+    choices.update(BUILTIN_NAMES) #add builtins
     return sorted(choices)
 
 #TODO: replace with bisect later

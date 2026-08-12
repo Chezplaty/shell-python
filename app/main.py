@@ -18,7 +18,6 @@ from contextlib import contextmanager
 import tty
 import termios
 
-
 @contextmanager
 def set_cbreak_mode():
     """
@@ -54,7 +53,7 @@ def main():
             sys.stdout.write("$ ")
             sys.stdout.flush()
 
-            line = LineEditor(choices).run()
+            line = LineEditor(choices, complete_manager.get_paths()).run()
         #restore on exit
 
         if not line.strip(): 

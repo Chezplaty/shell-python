@@ -16,7 +16,7 @@ def redraw(output: str, prefix: str) -> None:
 
 class LineEditor:
 
-    def __init__(self, choices: list[str]) -> None:
+    def __init__(self, choices: list[str], paths: MappingProxyType) -> None:
         """
         Sets up an empty input buffer and stores the known completion choices.
         """
@@ -24,6 +24,7 @@ class LineEditor:
         self.tab_cursor = None
         self.choices = choices
         self.candidate_lines = 0
+        self.paths = paths
 
     def run(self) -> str:
         """
@@ -102,6 +103,11 @@ class LineEditor:
         if not self.buffer:
             bell()
             return
+
+        #TODO: check for command name followed by space, check if it has a completer
+        prefix = "".join(self.buffer)
+        before, sep, prefix = prefix.rpartition(" ")
+        if sep: #if there is a space
 
         if self.tab_cursor is None:
             if not self.start_completion(): # builds candidates for the current word; return if no candidates

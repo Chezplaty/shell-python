@@ -5,11 +5,19 @@ from app.path_utils import get_executable
 from app.errors import BuiltinError
 from app.parser import Instruction
 
+from types import MappingProxyType 
+
 #TODO: create class to hold all completer scripts in a session
 class CompleteManager:
     def __init__(self):
         self.paths = {}
 
+    def get_paths(self) -> MappingProxyType:
+        """
+        Returns a read-only view of the registered completion paths.
+        """
+        return MappingProxyType(self.paths)
+    
     def handle_complete(self, instruction: Instruction):
         args = instruction.args
         flag = args[0]

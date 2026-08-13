@@ -78,14 +78,27 @@ class LineEditor:
             sys.stdout.write("\b \b")
             sys.stdout.flush()
 
-    def handle_escape(self):
-        sequence = sys.stdin.read(2) #read in 2 bytes, arrow keys are 3 bytes
+    def handle_escape(self) -> None:
+        """
+        Reads and handles escape sequences for special keys.
+        """
+        sequence = sys.stdin.read(2) #read in 2 bytes, arrow keys are 3 bytes including esc
+
+        if sequence in {'[D', '[C'}:
+            self.handle_arrow_keys(sequence)
+
+    def handle_arrow_keys(self, sequence: str) -> None:
+        """
+        Moves the cursor left or right based on the given arrow-key sequence.
+        Ignores movement that would place the cursor outside the input buffer.
+        """
 
         if sequence == '[D': #left
             if self.cursor_pos > 0:
                 self.cursor_pos -= 1
                 sys.stdout.write("\033[D")
                 sys.stdout.flush()
+
         elif sequence == '[C': #right
             if self.cursor_pos < len(self.buffer):
                 self.cursor_pos += 1
@@ -262,6 +275,8 @@ class LineEditor:
         """
         if command not in self.paths:
             return None
+
+        #comp_point = comp_line[:comp_point].encode()
 
         path = self.paths[command]
         os.chmod(path, os.stat(path).st_mode | 0o111) # make path executable for testing purposes

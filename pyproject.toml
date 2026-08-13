@@ -9,3 +9,4 @@ dev = ["pytest==9.1.1"]
 
 [tool.pytest.ini_options]
 python_files = ["pytests.py", "test_*.py", "*_test.py"]
+testpaths = ["tests"]

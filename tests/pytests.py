@@ -2,6 +2,7 @@ import os
 import stat
 import sys
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -10,6 +11,7 @@ from app.errors import BuiltinError
 from app.lexer import Lexer, LexState, TokenType, finish_token
 from app.parser import Instruction, Redirect
 from app.redirects import resolve_redirect_targets, open_redirects, redirected_fds
+from app.shell_builtins import handle_cd, handle_echo, handle_pwd, handle_type
 
 
 def make_executable(path: Path) -> None:
@@ -104,7 +106,7 @@ class TestHandleExternalPrograms:
 # ---------------------------------------------------------------------------
 
 class TestHandleType:
-    @pytest.mark.parametrize("builtin_cmd", sorted(shell_builtins.BUILTINS))
+    @pytest.mark.parametrize("builtin_cmd", sorted(shell_builtins.BUILTIN_NAMES))
     def test_reports_shell_builtin_for_each_builtin(self, builtin_cmd, capsys):
         shell_builtins.handle_type(make_instruction("type", [builtin_cmd]))
 
@@ -426,22 +428,24 @@ class TestRedirectedFds:
 
 class TestHandleCommand:
     def test_echo_prints_joined_args(self, capsys):
-        executor.handle_command(make_instruction("echo", ["hello", "world"]))
+        builtins = {"exit": None, "echo": handle_echo, "type": handle_type, "pwd": handle_pwd, "cd": handle_cd, "complete": None}
+        executor.handle_command(make_instruction("echo", ["hello", "world"]), builtins)
 
         captured = capsys.readouterr()
         assert captured.out == "hello world\n"
 
     def test_echo_with_no_args_prints_blank_line(self, capsys):
-        executor.handle_command(make_instruction("echo", []))
+        builtins = {"exit": None, "echo": handle_echo, "type": handle_type, "pwd": handle_pwd, "cd": handle_cd, "complete": None}
+        executor.handle_command(make_instruction("echo", []), builtins)
 
         captured = capsys.readouterr()
         assert captured.out == "\n"
 
     def test_type_delegates_to_handle_type_with_all_args(self, monkeypatch):
         seen = []
-        monkeypatch.setitem(shell_builtins.BUILTINS, "type", lambda instruction: seen.append(instruction.args))
+        builtins = {"exit": None, "echo": handle_echo, "type": lambda instruction: seen.append(instruction.args), "pwd": handle_pwd, "cd": handle_cd, "complete": None}
 
-        executor.handle_command(make_instruction("type", ["echo", "ls"]))
+        executor.handle_command(make_instruction("type", ["echo", "ls"]), builtins)
 
         assert seen == [["echo", "ls"]]
 
@@ -450,23 +454,27 @@ class TestHandleCommand:
         monkeypatch.setattr(
             executor, "handle_external_programs", lambda cmd, args, files: seen.append((cmd, args, files))
         )
+        builtins = {"exit": None, "echo": handle_echo, "type": handle_type, "pwd": handle_pwd, "cd": handle_cd, "complete": None}
 
-        executor.handle_command(make_instruction("ls", ["-la"]))
+        executor.handle_command(make_instruction("ls", ["-la"]), builtins)
 
         assert seen == [("ls", ["-la"], {})]
 
     def test_echo_redirected_to_a_file_writes_there_instead_of_stdout(self, capfd, tmp_path):
         target = tmp_path / "out.md"
+        builtins = {"exit": None, "echo": handle_echo, "type": handle_type, "pwd": handle_pwd, "cd": handle_cd, "complete": None}
 
         with capfd.disabled():
             executor.handle_command(
-                make_instruction("echo", ["hello", "world"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))])
+                make_instruction("echo", ["hello", "world"], [Redirect(TokenType.REDIRECT_STDOUT, str(target))]),
+                builtins
             )
 
         assert target.read_text() == "hello world\n"
 
     def test_exact_match_required_not_prefix(self, capsys):
-        executor.handle_command(make_instruction("echoing", ["surprise"]))
+        builtins = {"exit": None, "echo": handle_echo, "type": handle_type, "pwd": handle_pwd, "cd": handle_cd, "complete": None}
+        executor.handle_command(make_instruction("echoing", ["surprise"]), builtins)
 
         captured = capsys.readouterr()
         assert captured.out == "echoing: command not found\n"
@@ -773,7 +781,7 @@ class TestCompileChoices:
 
         choices = tab_completion.compile_choices()
 
-        assert set(shell_builtins.BUILTINS) <= set(choices)
+        assert set(shell_builtins.BUILTIN_NAMES) <= set(choices)
 
     def test_custom_executable_on_path_is_included(self, tmp_path, monkeypatch):
         make_executable(tmp_path / "my_custom_exe_1234")
@@ -846,7 +854,7 @@ class TestCompileChoices:
 # Tab-completion for builtins: find_insertion_point / get_candidates
 # ---------------------------------------------------------------------------
 
-BUILTIN_CHOICES = sorted(shell_builtins.BUILTINS)
+BUILTIN_CHOICES = sorted(shell_builtins.BUILTIN_NAMES)
 
 
 class TestFindInsertionPoint:
@@ -982,14 +990,16 @@ class TestGetPathCandidates:
 
 class TestRedraw:
     def test_erases_the_prefix_and_writes_the_output_in_its_place(self, capsys):
-        line_editor.redraw("echo", "ec")
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
+        editor.redraw("echo", "ec")
 
         assert capsys.readouterr().out == "\033[2D\033[0Kecho"
 
     def test_empty_prefix_only_appends_the_output(self, capsys):
         # A 0-length move is still interpreted as 1 by terminals, so redraw
         # skips the cursor-move escape entirely when there's no prefix to erase.
-        line_editor.redraw("echo", "")
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
+        editor.redraw("echo", "")
 
         assert capsys.readouterr().out == "\033[0Kecho"
 
@@ -1008,7 +1018,7 @@ class TestLineEditorBackspace:
     def _run_line_editor(self, monkeypatch, keys):
         monkeypatch.setattr(line_editor.sys, "stdin", self.FakeStdin(keys))
 
-        return line_editor.LineEditor(BUILTIN_CHOICES).run()
+        return line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({})).run()
 
     def test_backspace_removes_last_character_and_erases_it_on_screen(self, monkeypatch, capsys):
         result = self._run_line_editor(monkeypatch, ["a", "b", "\x7f", "\n"])
@@ -1027,7 +1037,7 @@ class TestLineEditorBackspace:
 
 class TestAutocomplete:
     def test_unique_prefix_completes_in_place_and_redraws_the_line(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("ech")
 
         editor.handle_tab()
@@ -1039,7 +1049,7 @@ class TestAutocomplete:
         assert capsys.readouterr().out == "\033[3D\033[0Kecho"
 
     def test_shared_prefix_first_tab_shows_the_list_without_completing(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("e")
 
         editor.handle_tab()
@@ -1048,7 +1058,7 @@ class TestAutocomplete:
         assert editor.candidate_lines > 0
 
     def test_shared_prefix_second_tab_completes_to_the_first_match_alphabetically(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("e")
 
         editor.handle_tab()
@@ -1057,7 +1067,7 @@ class TestAutocomplete:
         assert editor.buffer == list("echo")
 
     def test_no_matching_builtin_rings_the_bell_and_leaves_everything_unchanged(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("zzz")
 
         editor.handle_tab()
@@ -1074,7 +1084,7 @@ class TestFileArgumentCompletion:
     def test_completes_a_file_argument_after_a_space(self, tmp_path, monkeypatch):
         (tmp_path / "notes.txt").touch()
         monkeypatch.chdir(tmp_path)
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("cat no")
 
         editor.handle_tab()
@@ -1085,7 +1095,7 @@ class TestFileArgumentCompletion:
         (tmp_path / "readme.md").touch()
         (tmp_path / "report.txt").touch()
         monkeypatch.chdir(tmp_path)
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("cat re")
 
         editor.handle_tab()  # ambiguous - lists readme.md / report.txt
@@ -1100,7 +1110,7 @@ class TestFileArgumentCompletion:
         assert {first, second} == {"cat readme.md ", "cat report.txt "}
 
     def test_complete_with_empty_prefix_does_not_wipe_the_buffer(self):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("cat ")
         cursor = tab_completion.CandidateCursor(["only.txt"], "")
 
@@ -1114,7 +1124,7 @@ class TestFileArgumentCompletion:
         (sub / "readme.md").touch()
         (sub / "report.txt").touch()
         monkeypatch.chdir(tmp_path)
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("cat sub/re")
 
         editor.handle_tab()  # ambiguous - lists readme.md / report.txt
@@ -1132,7 +1142,7 @@ class TestFileArgumentCompletion:
 
 class TestDisplayCandidates:
     def test_restores_the_column_the_cursor_was_at_before_tab_was_pressed(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("ec")  # "$ " (2 cols) + "ec" -> column 5
 
         editor.display_candidates(["echo", "exit"])
@@ -1140,7 +1150,7 @@ class TestDisplayCandidates:
         assert capsys.readouterr().out == "\n\recho\n\rexit\033[2A\033[5G"
 
     def test_column_grows_with_the_buffer_length(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.buffer = list("export")  # "$ " (2 cols) + "export" -> column 9
 
         editor.display_candidates(["export"])
@@ -1148,7 +1158,7 @@ class TestDisplayCandidates:
         assert capsys.readouterr().out.endswith("\033[9G")
 
     def test_sets_candidate_lines_to_the_number_of_lines_shown(self):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
 
         editor.display_candidates(["echo", "exit", "export"])
 
@@ -1157,14 +1167,14 @@ class TestDisplayCandidates:
 
 class TestClearCandidates:
     def test_does_nothing_when_nothing_is_displayed(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
 
         editor.clear_candidates()
 
         assert capsys.readouterr().out == ""
 
     def test_erases_one_line_per_line_shown_and_moves_back_up(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.candidate_lines = 2
 
         editor.clear_candidates()
@@ -1172,7 +1182,7 @@ class TestClearCandidates:
         assert capsys.readouterr().out == "\033[B\033[2K" * 2 + "\033[2A\r"
 
     def test_resets_candidate_lines_to_zero(self):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.candidate_lines = 3
 
         editor.clear_candidates()
@@ -1180,7 +1190,7 @@ class TestClearCandidates:
         assert editor.candidate_lines == 0
 
     def test_is_a_no_op_when_called_a_second_time(self, capsys):
-        editor = line_editor.LineEditor(BUILTIN_CHOICES)
+        editor = line_editor.LineEditor(BUILTIN_CHOICES, MappingProxyType({}))
         editor.candidate_lines = 2
         editor.clear_candidates()
         capsys.readouterr()  # discard the first call's output
@@ -1209,7 +1219,7 @@ class TestMain:
         monkeypatch.setattr(main, "compile_choices", lambda: [])
 
         class FakeLineEditor:
-            def __init__(self, choices):
+            def __init__(self, choices, paths):
                 pass
 
             def run(self):
@@ -1233,7 +1243,7 @@ class TestMain:
         self._stub_line_editor(monkeypatch, iter(["echo hi", "type ls", "exit"]))
         calls = []
         monkeypatch.setattr(
-            main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
+            main, "handle_command", lambda instruction, builtins: calls.append((instruction.cmd, instruction.args))
         )
 
         main.main()
@@ -1244,7 +1254,7 @@ class TestMain:
         self._stub_line_editor(monkeypatch, iter(["echo    hi     there", "exit"]))
         calls = []
         monkeypatch.setattr(
-            main, "handle_command", lambda instruction: calls.append((instruction.cmd, instruction.args))
+            main, "handle_command", lambda instruction, builtins: calls.append((instruction.cmd, instruction.args))
         )
 
         main.main()

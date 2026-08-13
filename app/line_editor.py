@@ -117,7 +117,7 @@ class LineEditor:
 
         self.list_or_cycle(self.tab_cursor) # lists candidates once, then cycles through them
 
-    def run_completer_script(self, command: str, args: list[str]) -> list[str] | None:
+    def run_completer_script(self, command: str, args: list[str], comp_line: str) -> list[str] | None:
         """
         Runs the registered completer script for a command and returns its output lines.
         Returns an empty list if no completer is registered for the command.
@@ -135,18 +135,20 @@ class LineEditor:
         Gathers candidates for the word under the cursor and starts a new
         CandidateCursor for them. Returns False if there's nothing to complete.
         """
-        prefix = "".join(self.buffer)
-        command, sep, remainder = prefix.partition(" ")
+        input = "".join(self.buffer)
+        command, sep, remainder = input.partition(" ")
 
         if sep: #if there is a space
-            args = remainder.split()
+            args = remainder.split()   
             prefix = args[-1] if args else ""
 
-            candidates = self.run_completer_script(command, args)
+            #TODO: implement comp_line and comp_pos. create cursor tracker
+            candidates = self.run_completer_script(command, args, input)
 
             if candidates is None: #if no completer script, try and find path
                 prefix, candidates = get_path_candidates(prefix)
         else:
+            prefix = input
             candidates = get_candidates(self.choices, prefix)
 
         if not candidates:

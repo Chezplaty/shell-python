@@ -117,7 +117,7 @@ class LineEditor:
 
         self.list_or_cycle(self.tab_cursor) # lists candidates once, then cycles through them
 
-    def run_completer_script(self, command: str) -> list[str]:
+    def run_completer_script(self, command: str, args: list[str]) -> list[str] | None:
         """
         Runs the registered completer script for a command and returns its output lines.
         Returns an empty list if no completer is registered for the command.
@@ -127,7 +127,7 @@ class LineEditor:
         
         path = self.paths[command]
         os.chmod(path, os.stat(path).st_mode | 0o111) # make path executable for testing purposes
-        output = subprocess.run([path], capture_output=True, text=True)
+        output = subprocess.run([path, *args], capture_output=True, text=True)
         return output.stdout.splitlines()
 
     def start_completion(self) -> bool:
@@ -136,9 +136,14 @@ class LineEditor:
         CandidateCursor for them. Returns False if there's nothing to complete.
         """
         prefix = "".join(self.buffer)
-        command, sep, prefix = prefix.rpartition(" ")
+        command, sep, remainder = prefix.partition(" ")
+
         if sep: #if there is a space
-            candidates = self.run_completer_script(command)
+            args = remainder.split()
+            prefix = args[-1] if args else ""
+
+            candidates = self.run_completer_script(command, args)
+
             if candidates is None: #if no completer script, try and find path
                 prefix, candidates = get_path_candidates(prefix)
         else:

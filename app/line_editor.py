@@ -29,7 +29,7 @@ class LineEditor:
         Returns the finished line once the user presses enter.
         """
         while True:
-            key = sys.stdin.read(1)
+            key = sys.stdin.read(1) # read one char at a time
 
             if key == '\n':
                 self.clear_candidates()
@@ -41,13 +41,18 @@ class LineEditor:
                 self.handle_tab()
                 continue
 
+            # any non-tab key cancels in-progress completion cycle
             self.tab_cursor = None
 
             if key == '\x7f':
                 self.handle_backspace()
                 continue
 
-            self.add_key(key)
+            if key == '\x1b': #esc character, start of many terminal esc sequences
+                self.handle_escape()
+                continue
+
+            self.add_key(key) # any other character typed normally
 
     # -------------------------------------------------------------------------
     # Input handling
@@ -73,6 +78,20 @@ class LineEditor:
             sys.stdout.write("\b \b")
             sys.stdout.flush()
 
+    def handle_escape(self):
+        sequence = sys.stdin.read(2) #read in 2 bytes, arrow keys are 3 bytes
+
+        if sequence == '[D': #left
+            if self.cursor_pos > 0:
+                self.cursor_pos -= 1
+                sys.stdout.write("\033[D")
+                sys.stdout.flush()
+        elif sequence == '[C': #right
+            if self.cursor_pos < len(self.buffer):
+                self.cursor_pos += 1
+                sys.stdout.write("\033[C")
+                sys.stdout.flush()
+
     # -------------------------------------------------------------------------
     # Tab completion
     # -------------------------------------------------------------------------
@@ -81,20 +100,19 @@ class LineEditor:
         """
         Advances the tab-completion state machine for the current buffer.
         """
+        # TODO: print tab for empty buffer
         if not self.buffer:
             bell()
             return
 
         if self.tab_cursor is None:
-            if not self.start_completion():
+            if not self.start_completion(): # builds candidates for the current word; return if no candidates
                 return
-
-            if self.extend_to_lcp(self.tab_cursor):
+            if self.extend_to_lcp(self.tab_cursor): # extends to longest prefix, if True, skip list/cycle
                 return
-
             bell()
 
-        self.list_or_cycle(self.tab_cursor)
+        self.list_or_cycle(self.tab_cursor) # lists candidates once, then cycles through them
 
     def start_completion(self) -> bool:
         """
@@ -104,13 +122,14 @@ class LineEditor:
         input = "".join(self.buffer)
         command, sep, remainder = input.partition(" ")
 
-        if sep:
+        if sep: # if there is a space
             args = remainder.split()
             prefix = args[-1] if args else ""
 
+            # TODO: implement comp_line and comp_pos. create cursor tracker
             candidates = self.run_completer_script(command, args, input)
 
-            if candidates is None:
+            if candidates is None: # if no completer script, try and find path
                 prefix, candidates = get_path_candidates(prefix)
         else:
             prefix = input
@@ -147,7 +166,8 @@ class LineEditor:
         then cycles through them one at a time on every press after that.
         """
         if not cursor.listed and len(cursor.candidates) > 1:
-            if self.candidate_lines:
+
+            if self.candidate_lines: # if anything from before displayed, clear it
                 self.clear_candidates()
 
             self.display_candidates(format_candidates(cursor.candidates))
@@ -174,7 +194,7 @@ class LineEditor:
         self.redraw(candidate, cursor.prefix)
 
         if cursor.prefix:
-            del self.buffer[-len(cursor.prefix):]
+            del self.buffer[-len(cursor.prefix):] # delete prefix from buffer
 
         self.buffer.extend(candidate)
         cursor.prefix = candidate
@@ -185,15 +205,15 @@ class LineEditor:
 
     def redraw(self, output: str, prefix: str) -> None:
         """
-        Erases the last len(prefix) characters before the cursor and writes
-        output in their place.
+        Erases the last len(prefix) characters before the cursor and writes output in their place.
         """
-        if prefix:
-            sys.stdout.write(f"\033[{len(prefix)}D")
+
+        if prefix: # a 0-length move is still interpreted as 1 by terminals, so skip it
+            sys.stdout.write(f"\033[{len(prefix)}D") # move cursor to before prefix
             self.cursor_pos -= len(prefix)
 
-        sys.stdout.write("\033[0K")
-        sys.stdout.write(output)
+        sys.stdout.write("\033[0K") # erase from cursor to end of line
+        sys.stdout.write(f"{output}")
         self.cursor_pos += len(output)
         sys.stdout.flush()
 
@@ -202,14 +222,14 @@ class LineEditor:
         Prints candidate lines below the prompt without disturbing the cursor.
         Restores the cursor to its original position after drawing them.
         """
-        column = len(self.buffer) + 3
+        column = len(self.buffer) + 3 # "$ " (2 cols) + buffer, 1-indexed, just past the last typed char
 
         for line in lines:
             sys.stdout.write("\n\r")
             sys.stdout.write(line)
 
-        sys.stdout.write(f"\033[{len(lines)}A")
-        sys.stdout.write(f"\033[{column}G")
+        sys.stdout.write(f"\033[{len(lines)}A") # back up to the prompt line
+        sys.stdout.write(f"\033[{column}G") # restore the column cursor was at
         sys.stdout.flush()
 
         self.candidate_lines = len(lines)
@@ -219,12 +239,12 @@ class LineEditor:
         Erases any previously displayed candidate lines from the terminal.
         Does nothing if no candidates are currently shown.
         """
-        if not self.candidate_lines:
+        if not self.candidate_lines: # lines == 0
             return
 
         for _ in range(self.candidate_lines):
-            sys.stdout.write("\033[B")
-            sys.stdout.write("\033[2K")
+            sys.stdout.write("\033[B") # move down
+            sys.stdout.write("\033[2K") # erase
 
         sys.stdout.write(f"\033[{self.candidate_lines}A\r")
         sys.stdout.flush()
@@ -237,20 +257,13 @@ class LineEditor:
 
     def run_completer_script(self, command: str, args: list[str], comp_line: str) -> list[str] | None:
         """
-        Runs the registered completer script for a command and returns its
-        output lines. Returns None if no completer is registered.
+        Runs the registered completer script for a command and returns its output lines.
+        Returns an empty list if no completer is registered for the command.
         """
         if command not in self.paths:
             return None
 
         path = self.paths[command]
-
-        os.chmod(path, os.stat(path).st_mode | 0o111)
-
-        output = subprocess.run(
-            [path, *args],
-            capture_output=True,
-            text=True,
-        )
-
+        os.chmod(path, os.stat(path).st_mode | 0o111) # make path executable for testing purposes
+        output = subprocess.run([path, *args], capture_output=True, text=True)
         return output.stdout.splitlines()

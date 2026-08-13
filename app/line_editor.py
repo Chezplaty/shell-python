@@ -108,17 +108,6 @@ class LineEditor:
             bell()
             return
 
-        #TODO: check for command name followed by space, check if it has a completer
-        prefix = "".join(self.buffer)
-        command, sep, prefix = prefix.rpartition(" ")
-        
-        if sep: #if there is a space
-            if command in self.paths: #run the script
-                path = self.paths[command]
-                os.chmod(path, os.stat(path).st_mode | 0o111)
-                output = subprocess.run([path], capture_output=True, text=True)
-                print(output)
-
         if self.tab_cursor is None:
             if not self.start_completion(): # builds candidates for the current word; return if no candidates
                 return
@@ -128,15 +117,26 @@ class LineEditor:
 
         self.list_or_cycle(self.tab_cursor) # lists candidates once, then cycles through them
 
+    def run_completer_script(self, command: str) -> list[str]:
+        if command not in self.paths:
+            return
+        
+        path = self.paths[command]
+        os.chmod(path, os.stat(path).st_mode | 0o111) # make path executable for testing purposes
+        output = subprocess.run([path], capture_output=True, text=True)
+        return output.stdout.splitlines()
+
     def start_completion(self) -> bool:
         """
         Gathers candidates for the word under the cursor and starts a new
         CandidateCursor for them. Returns False if there's nothing to complete.
         """
         prefix = "".join(self.buffer)
-        before, sep, prefix = prefix.rpartition(" ")
+        command, sep, prefix = prefix.rpartition(" ")
         if sep: #if there is a space
-            prefix, candidates = get_path_candidates(prefix)
+            candidates = self.run_completer_script(command)
+            if not candidates: #if no completer script, try and find path
+                prefix, candidates = get_path_candidates(prefix)
         else:
             candidates = get_candidates(self.choices, prefix)
 

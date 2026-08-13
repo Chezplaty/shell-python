@@ -270,15 +270,18 @@ class LineEditor:
 
     def run_completer_script(self, command: str, args: list[str], comp_line: str) -> list[str] | None:
         """
-        Runs the registered completer script for a command and returns its output lines.
-        Returns an empty list if no completer is registered for the command.
+        Runs the registered completer script with command arguments and completion environment.
+        Returns a list of the script's output lines, or None if no completer is registered.
         """
+
         if command not in self.paths:
             return None
 
-        #comp_point = comp_line[:comp_point].encode()
+        env_copy = os.environ.copy()
+        env_copy["COMP_LINE"] = comp_line
+        env_copy["COMP_POINT"] = str(len(comp_line[:self.cursor_pos].encode())) # byte index of cursor position
 
         path = self.paths[command]
         os.chmod(path, os.stat(path).st_mode | 0o111) # make path executable for testing purposes
-        output = subprocess.run([path, *args], capture_output=True, text=True)
+        output = subprocess.run([path, *args], env=env_copy, capture_output=True, text=True)
         return output.stdout.splitlines()

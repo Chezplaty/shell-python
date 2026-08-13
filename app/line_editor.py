@@ -118,8 +118,12 @@ class LineEditor:
         self.list_or_cycle(self.tab_cursor) # lists candidates once, then cycles through them
 
     def run_completer_script(self, command: str) -> list[str]:
+        """
+        Runs the registered completer script for a command and returns its output lines.
+        Returns an empty list if no completer is registered for the command.
+        """
         if command not in self.paths:
-            return
+            return None
         
         path = self.paths[command]
         os.chmod(path, os.stat(path).st_mode | 0o111) # make path executable for testing purposes
@@ -135,7 +139,7 @@ class LineEditor:
         command, sep, prefix = prefix.rpartition(" ")
         if sep: #if there is a space
             candidates = self.run_completer_script(command)
-            if not candidates: #if no completer script, try and find path
+            if candidates is None: #if no completer script, try and find path
                 prefix, candidates = get_path_candidates(prefix)
         else:
             candidates = get_candidates(self.choices, prefix)

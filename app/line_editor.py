@@ -6,6 +6,7 @@ import os
 
 from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_path_candidates, longest_common_prefix, bell
 
+#TODO: split some methods into separate modules
 class LineEditor:
 
     # -------------------------------------------------------------------------

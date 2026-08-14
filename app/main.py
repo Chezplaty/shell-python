@@ -8,10 +8,11 @@ from app.tab_completion import compile_choices
 from app.parser import parse
 from app.shell_builtins import (
     CompleteManager,
+    JobsManager,
     handle_cd,
     handle_echo,
     handle_pwd,
-    handle_type,
+    handle_type
 )
 
 from contextlib import contextmanager
@@ -39,13 +40,15 @@ def main():
     """
     choices = compile_choices()
     complete_manager = CompleteManager()
+    jobs_manager = JobsManager()
 
     builtins = {"exit": None,
                 "echo": handle_echo,
                 "type": handle_type,
                 "pwd": handle_pwd,
                 "cd": handle_cd,
-                "complete": complete_manager.handle_complete}
+                "complete": complete_manager.handle_complete,
+                "jobs": jobs_manager.handle_jobs}
 
     while True:
         with set_cbreak_mode():

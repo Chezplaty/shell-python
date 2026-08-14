@@ -83,6 +83,17 @@ class CompleteManager:
         except KeyError: #if key doesnt exist, dont raise error
             pass
 
+class JobsManager:
+
+    def __init__(self):
+        self.jobs = {}
+    
+    def handle_jobs(self, instruction: Instruction) -> None:
+        if not instruction.args: #no arguments - list any programs running
+            if not self.jobs: #no programs running
+                return
+
+
 def handle_cd(instruction: Instruction) -> None:
     """
     Checks if given directory exists.
@@ -146,4 +157,5 @@ BUILTIN_NAMES = {
     "pwd",
     "cd",
     "complete",
+    "jobs"
 }

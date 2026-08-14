@@ -20,20 +20,46 @@ class CompleteManager:
     
     def handle_complete(self, instruction: Instruction):
         args = instruction.args
+
+        if not args: 
+            return
+        
         flag = args[0]
 
         if flag == "-p":
-            command = args[1]
-            try:
-                path = self.paths[command]
-                print(f"complete -C '{path}' {command}")
-            except Exception:
-                raise BuiltinError(instruction.cmd, f"{args[1]}: no completion specification")
+            self.print_complete(args, instruction.cmd)
 
         elif flag == "-C":
+            self.register_completer(args, instruction.cmd)
+
+    def print_complete(self, args: list[str], cmd: str) -> None:
+        """
+        Prints the registered completer path for the given command.
+        Raises an error if no command or completion specification is provided.
+        """
+
+        try:
+            command = args[1]
+            path = self.paths[command]
+            print(f"complete -C '{path}' {command}")
+        except IndexError:
+            raise BuiltinError(cmd, "no command given")
+        except KeyError:
+            raise BuiltinError(cmd, f"{args[1]}: no completion specification")
+
+    def register_completer(self, args: list[str], cmd: str) -> None:
+        """
+        Registers a completer path for each specified command.
+        Raises an error if the completer path or command is missing.
+        """
+
+        try:
             path = args[1]
-            command = args[2]
-            self.paths[command] = path
+            commands = args[2:]
+            for command in commands:
+                self.paths[command] = path
+        except IndexError:
+            raise BuiltinError(cmd, "missing arguments for option: -C")
 
 
 

@@ -283,5 +283,6 @@ class LineEditor:
 
         path = self.paths[command]
         os.chmod(path, os.stat(path).st_mode | 0o111) # make path executable for testing purposes
+        #TODO: implement error handling when path cannot be run
         output = subprocess.run([path, *args], env=env_copy, capture_output=True, text=True)
         return output.stdout.splitlines()

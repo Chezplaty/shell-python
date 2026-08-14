@@ -9,7 +9,7 @@ from types import MappingProxyType
 
 #TODO: create class to hold all completer scripts in a session
 class CompleteManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.paths = {}
 
     def get_paths(self) -> MappingProxyType:
@@ -18,7 +18,12 @@ class CompleteManager:
         """
         return MappingProxyType(self.paths)
     
-    def handle_complete(self, instruction: Instruction):
+    def handle_complete(self, instruction: Instruction) -> None:
+        """
+        Handles the complete builtin by dispatching the requested completion operation.
+        Supports printing, registering, and removing completion specifications.
+        """
+
         args = instruction.args
 
         if not args: 
@@ -31,6 +36,9 @@ class CompleteManager:
 
         elif flag == "-C":
             self.register_completer(args, instruction.cmd)
+
+        elif flag == "-r":
+            self.remove_completer(args, instruction.cmd)
 
     def print_complete(self, args: list[str], cmd: str) -> None:
         """
@@ -61,7 +69,19 @@ class CompleteManager:
         except IndexError:
             raise BuiltinError(cmd, "missing arguments for option: -C")
 
+    def remove_completer(self, args: list[str], cmd: str) -> None:
+        """
+        Removes the registered completer for the given command.
+        Does nothing if no completion specification exists for the command.
+        """
 
+        try:
+            command = args[1]
+            del self.paths[command]
+        except IndexError:
+            raise BuiltinError(cmd, "no command given")
+        except KeyError: #if key doesnt exist, dont raise error
+            pass
 
 def handle_cd(instruction: Instruction) -> None:
     """

@@ -9,7 +9,6 @@ from app.tab_completion import compile_choices
 from app.parser import parse
 from app.shell_builtins import (
     CompleteManager,
-    JobsManager,
     handle_cd,
     handle_echo,
     handle_pwd,
@@ -34,6 +33,48 @@ def set_cbreak_mode():
     finally:
         termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
 
+#TODO: create a class to hold all background jobs
+
+class JobsManager:
+
+    def __init__(self):
+        self.jobs = {} # map pid: job
+        self.job_num = 1 # start at 1
+        self.used_job_nums = set()
+
+    def get_next_job_num(self):
+        while self.job_num in self.used_job_nums:
+            self.job_num += 1
+
+    def add_job(self, pid: int, instruction: Instruction):
+        self.get_next_job_num()
+        self.jobs[pid] = (self.job_num, instruction)
+        self.reserve_job_num()
+
+    def reserve_job_num(self):
+        self.used_job_nums.add(self.job_num)
+        self.job_num += 1
+
+    def remove_job(self, pid: int):
+        job_num = self.jobs[pid][0]
+        self.used_job_nums.remove(job_num)
+        self.job_num = min(self.job_num, job_num) #job number reusable, use lower num
+
+    def print_job(self, pid: int):
+        job_num, instruction = self.jobs[pid]
+        print(f"[{job_num}] {pid}")
+
+
+def run_in_background(jb_man: JobsManager, instruction: Instruction, builtins: dict[str: function]) -> None:
+    pid = os.fork()
+    if pid == 0: #child process
+        handle_command(instruction, builtins)
+        exit(0)
+    else: #parent process
+        jb_man.add_job(pid, instruction)
+        jb_man.print_job(pid)
+        return
+
 def main():
     """
     Runs the interactive shell loop that reads and processes user commands.
@@ -49,7 +90,7 @@ def main():
                 "pwd": handle_pwd,
                 "cd": handle_cd,
                 "complete": complete_manager.handle_complete,
-                "jobs": jobs_manager.handle_jobs}
+                "jobs": None}
 
     while True:
         with set_cbreak_mode():
@@ -75,14 +116,8 @@ def main():
             break
 
         try:
-            
             if instruction.run_bg:
-                pid = os.fork()
-                if pid == 0: #child process
-                    handle_command(instruction, builtins)
-                    exit(0)
-                else: #parent process
-                    continue
+                run_in_background(jobs_manager, instruction, builtins)
             else:
                 handle_command(instruction, builtins)
         except BuiltinError as e:

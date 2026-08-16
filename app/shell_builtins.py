@@ -93,7 +93,6 @@ class JobsManager:
             if not self.jobs: #no programs running
                 return
 
-
 def handle_cd(instruction: Instruction) -> None:
     """
     Checks if given directory exists.

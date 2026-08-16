@@ -1,3 +1,4 @@
+import os
 import subprocess
 from typing import IO
 
@@ -24,9 +25,10 @@ def handle_command(instruction: Instruction, builtins: dict[str, function]) -> N
     Runs a single parsed command.
     Any redirects on the command are set up first so output goes to the right place.
     """
-
+    
     with open_redirects(instruction) as files:
         handler = builtins.get(instruction.cmd, "")
+
         if handler:
             #change fds (rewire std outputs) if needed
             with redirected_fds(files):

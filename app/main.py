@@ -1,4 +1,5 @@
 import sys
+import os
 
 from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
@@ -74,7 +75,16 @@ def main():
             break
 
         try:
-            handle_command(instruction, builtins)
+            
+            if instruction.run_bg:
+                pid = os.fork()
+                if pid == 0: #child process
+                    handle_command(instruction, builtins)
+                    exit(0)
+                else: #parent process
+                    continue
+            else:
+                handle_command(instruction, builtins)
         except BuiltinError as e:
             print(e)
 

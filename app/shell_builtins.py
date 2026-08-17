@@ -7,7 +7,6 @@ from app.parser import Instruction
 
 from types import MappingProxyType 
 
-#TODO: create class to hold all completer scripts in a session
 class CompleteManager:
     def __init__(self) -> None:
         self.paths = {}
@@ -82,6 +81,9 @@ class CompleteManager:
             raise BuiltinError(cmd, "no command given")
         except KeyError: #if key doesnt exist, dont raise error
             pass
+
+#TODO: create a handle_jobs function: collects all jobs that have a finished status
+#print them, and remove them from jobs dictionary
 
 def handle_cd(instruction: Instruction) -> None:
     """

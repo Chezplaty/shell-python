@@ -7,13 +7,15 @@ from app.parser import Instruction
 from app.jobs import JobsManager, fork_and_track
 
 def handle_external_programs(instruction: Instruction, files: dict[int, IO], jobs_manager: JobsManager):
-
+    """
+    Run an external program with the provided file descriptors.
+    Fork the process, redirect its files, and execute the requested command.
+    """
     if get_executable(instruction.cmd) is None:
         print(f"{instruction.cmd}: command not found")
         return
 
     def run_in_child():
-
         for fd, file in files.items():
             os.dup2(file.fileno(), fd)
 

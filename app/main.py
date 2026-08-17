@@ -1,5 +1,6 @@
 import sys
 import os
+import signal
 
 from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
@@ -42,6 +43,9 @@ class JobsManager:
         self.job_num = 1 # start at 1
         self.used_job_nums = set()
 
+    def has_job(self, pid: int) -> bool:
+        return pid in self.jobs
+    
     def get_next_job_num(self):
         while self.job_num in self.used_job_nums:
             self.job_num += 1
@@ -57,24 +61,51 @@ class JobsManager:
 
     def remove_job(self, pid: int):
         job_num = self.jobs[pid][0]
-        self.used_job_nums.remove(job_num)
+        del self.used_job_nums[job_num]
         self.job_num = min(self.job_num, job_num) #job number reusable, use lower num
 
     def print_job(self, pid: int):
         job_num, instruction = self.jobs[pid]
         print(f"[{job_num}] {pid}")
 
+def make_sigchld_handler(jobs_manager: JobsManager):
+
+    def handle_sigchld(_signum, _frame):
+        while True:
+            try:
+                pid, status = os.waitpid(-1, os.WNOHANG) # -1: status requested for any child process
+
+                if pid == 0:
+                    return
+
+                if jobs_manager.has_job(pid):
+                    jobs_manager.remove_job(pid)
+
+            except ChildProcessError as e:
+                print(e)
+                return
+
+    return handle_sigchld
 
 def run_in_background(jb_man: JobsManager, instruction: Instruction, builtins: dict[str: function]) -> None:
-    pid = os.fork()
-    if pid == 0: #child process
-        handle_command(instruction, builtins)
-        exit(0)
-    else: #parent process
-        jb_man.add_job(pid, instruction)
-        jb_man.print_job(pid)
-        return
 
+    #temporarily block signals
+    signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGCHLD})
+
+    try:
+        pid = os.fork()
+        if pid == 0: #child process
+
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGCHLD})
+            handle_command(instruction, builtins)
+            exit(0)
+        else: #parent process
+            jb_man.add_job(pid, instruction)
+            jb_man.print_job(pid)
+    finally:
+        #unblock
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGCHLD})
+        
 def main():
     """
     Runs the interactive shell loop that reads and processes user commands.
@@ -83,6 +114,9 @@ def main():
     choices = compile_choices()
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()
+    
+    handler = make_sigchld_handler(jobs_manager)
+    signal.signal(signal.SIGCHLD, handler)
 
     builtins = {"exit": None,
                 "echo": handle_echo,

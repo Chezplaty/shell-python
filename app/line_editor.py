@@ -39,12 +39,7 @@ class LineEditor:
 
             if self.read_fd in ready:
                 os.read(self.read_fd, 1024) #consume at most 1024 bytes in buffer
-
-                for pid in self.job_man.get_completed_jobs():
-                    job = self.job_man.get_job(pid)
-                    self.job_man.remove_job(pid)
-                    self.print_job_and_redisplay(job)
-
+                self.process_background_job()
                 continue
 
 
@@ -73,6 +68,20 @@ class LineEditor:
                 continue
 
             self.add_key(key) # any other character typed normally
+
+    # -------------------------------------------------------------------------
+    # Background jobs
+    # -------------------------------------------------------------------------
+
+    def process_background_job(self) -> None:
+        """
+        Processes completed background jobs and displays their status.
+        Removes each completed job after redisplaying the current input line.
+        """
+        for pid in self.job_man.get_completed_jobs():
+            job = self.job_man.get_job(pid)
+            self.job_man.remove_job(pid)
+            self.print_job_and_redisplay(job)
 
     # -------------------------------------------------------------------------
     # Input handling
@@ -236,7 +245,11 @@ class LineEditor:
     # Terminal display
     # -------------------------------------------------------------------------
 
-    def print_job_and_redisplay(self, job: Job):
+    def print_job_and_redisplay(self, job: Job) -> None:
+        """
+        Prints a completed job notification and redraws the current command line.
+        Restores the cursor to its previous position after displaying the notification.
+        """
         sys.stdout.write('\r\n')
 
         line = job.instruction.cmd + " ".join(job.instruction.args)

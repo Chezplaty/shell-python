@@ -39,8 +39,14 @@ class LineEditor:
 
             if self.read_fd in ready:
                 #TODO: implement job removal
-                ...
-                
+                for pid in self.job_man.get_completed_jobs():
+                    job = self.job_man.get_job(pid)
+                    self.job_man.remove_job(pid)
+                    line = job.instruction.cmd + " ".join(job.instruction.args)
+                    print(f"[{job.job_num}] + {job.status:<10}{line}")
+                continue
+
+
             if sys.stdin in ready:
                 key = sys.stdin.read(1) # read one char at a time
 

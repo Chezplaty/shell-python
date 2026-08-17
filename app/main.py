@@ -2,8 +2,6 @@ import sys
 import os
 import signal
 
-from collections import namedtuple
-
 from app.errors import BuiltinError, ParseError
 from app.executor import handle_command
 from app.lexer import Lexer

@@ -12,6 +12,10 @@ class JobsManager:
         self.jobs: dict[int, Job] = {}
         self.job_num = 1
         self.used_job_nums = set()
+        self.completed_background_jobs = set()
+
+    def get_job(self, pid: int) -> Job:
+        return self.jobs[pid]
 
     def get_next_job_num(self) -> int:
         """
@@ -41,6 +45,8 @@ class JobsManager:
         job = self.jobs.get(pid)
         if job is not None:
             self.jobs[pid] = job._replace(status=status)
+            if job.job_num is not None: # if it is a background job, mark it as completed
+                self.completed_background_jobs.add(pid)
 
     def is_finished(self, pid: int) -> bool:
         """
@@ -55,9 +61,10 @@ class JobsManager:
         Reset the next job number if the removed number is less than the job num.
         """
         job = self.jobs.pop(pid, None)
-        if job.job_num is not None:
+        if pid in self.completed_background_jobs:
             self.used_job_nums.discard(job.job_num)
             self.job_num = min(self.job_num, job.job_num)
+            self.completed_background_jobs.remove(pid)
 
     def print_job(self, pid: int):
         """
@@ -67,6 +74,11 @@ class JobsManager:
         job = self.jobs[pid]
         print(f"[{job.job_num}] {pid}")
 
+    def get_completed_jobs(self) -> set[int]:
+        """
+        Return a copy so that changes while looping do not affect the loop.
+        """
+        return list(self.completed_background_jobs)
 
 def make_sigchld_handler(jobs_manager: JobsManager) -> function:
     """
@@ -86,7 +98,7 @@ def make_sigchld_handler(jobs_manager: JobsManager) -> function:
             if pid == 0:
                 return
             
-            jobs_manager.mark_exited(pid, status)
+            jobs_manager.mark_exited(pid, 'done')
 
     return handle_sigchld
 

@@ -7,6 +7,7 @@ import os
 from app.tab_completion import CandidateCursor, format_candidates, get_candidates, get_path_candidates, longest_common_prefix, bell
 
 #TODO: split some methods into separate modules
+#TODO: since cursor can move left and right, it can delete inside words, add support for that
 class LineEditor:
 
     # -------------------------------------------------------------------------

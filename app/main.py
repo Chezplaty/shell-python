@@ -45,6 +45,9 @@ def main():
     choices = compile_choices()
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()
+
+    read_fd, write_fd = os.pipe() # create pipe to wake up line editor for signals
+    signal.set_wakeup_fd(write_fd) # if SIGCHLD comes, write byte into this fd
     
     handler = make_sigchld_handler(jobs_manager)
     signal.signal(signal.SIGCHLD, handler)

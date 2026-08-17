@@ -1,26 +1,28 @@
 import os
-import subprocess
 from typing import IO
 
 from app.path_utils import get_executable
 from app.redirects import open_redirects, redirected_fds
 from app.parser import Instruction
+from app.jobs import JobsManager, fork_and_track
 
-def handle_external_programs(cmd: str, args: list[str], files: dict[int, IO]) -> None:
-    """
-    Runs an external command as its own program, found by searching PATH.
-    Its output, errors, and input go wherever the command's own redirects say they should.
-    """
+def handle_external_programs(instruction: Instruction, files: dict[int, IO], jobs_manager: JobsManager):
 
-    #TODO: implement error handling if subprocess does not work
+    if get_executable(instruction.cmd) is None:
+        print(f"{instruction.cmd}: command not found")
+        return
 
-    program = get_executable(cmd)
-    if program:
-        subprocess.run([cmd, *args], stdin=files.get(0), stdout=files.get(1), stderr=files.get(2))
-    else:
-        print(f"{cmd}: command not found")
+    def run_in_child():
 
-def handle_command(instruction: Instruction, builtins: dict[str, function]) -> None:
+        for fd, file in files.items():
+            os.dup2(file.fileno(), fd)
+
+        os.execvp(instruction.cmd, [instruction.cmd, *instruction.args])
+        #dont need to restore fd, child process exits
+    
+    fork_and_track(jobs_manager, instruction, False, run_in_child)
+
+def handle_command(instruction: Instruction, builtins: dict[str, function], jobs_manager: JobsManager) -> None:
     """
     Runs a single parsed command.
     Any redirects on the command are set up first so output goes to the right place.
@@ -34,4 +36,4 @@ def handle_command(instruction: Instruction, builtins: dict[str, function]) -> N
             with redirected_fds(files):
                 handler(instruction)
         else:
-            handle_external_programs(instruction.cmd, instruction.args, files)
+            handle_external_programs(instruction, files, jobs_manager)

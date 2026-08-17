@@ -38,12 +38,13 @@ class LineEditor:
             ready, _, _ = select.select([sys.stdin, self.read_fd], [], [])
 
             if self.read_fd in ready:
-                #TODO: implement job removal
+                os.read(self.read_fd, 1024) #consume at most 1024 bytes in buffer
+
                 for pid in self.job_man.get_completed_jobs():
                     job = self.job_man.get_job(pid)
                     self.job_man.remove_job(pid)
-                    line = job.instruction.cmd + " ".join(job.instruction.args)
-                    print(f"[{job.job_num}] + {job.status:<10}{line}")
+                    self.print_job_and_redisplay(job)
+
                 continue
 
 
@@ -234,6 +235,17 @@ class LineEditor:
     # -------------------------------------------------------------------------
     # Terminal display
     # -------------------------------------------------------------------------
+
+    def print_job_and_redisplay(self, job: Job):
+        sys.stdout.write('\r\n')
+
+        line = job.instruction.cmd + " ".join(job.instruction.args)
+        sys.stdout.write(f"[{job.job_num}] + {job.status:<10}{line}\n")
+
+        sys.stdout.write("$ ")
+        sys.stdout.write(''.join(self.buffer))
+        sys.stdout.write(f"\033[{self.cursor_pos + 3}G")
+        sys.stdout.flush()
 
     def redraw(self, output: str, prefix: str) -> None:
         """

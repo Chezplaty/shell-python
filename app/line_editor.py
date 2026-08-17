@@ -1,6 +1,6 @@
 import sys
 import subprocess
-
+import select
 import os
 
 
@@ -14,7 +14,7 @@ class LineEditor:
     # Lifecycle / main loop
     # -------------------------------------------------------------------------
 
-    def __init__(self, choices: list[str], paths: MappingProxyType) -> None:
+    def __init__(self, choices: list[str], paths: MappingProxyType, read_fd: 'fd', job_man: JobsManager) -> None:
         """
         Sets up an empty input buffer and stores the known completion choices.
         """
@@ -24,6 +24,8 @@ class LineEditor:
         self.cursor_pos = 0
         self.tab_cursor = None
         self.paths = paths
+        self.read_fd = read_fd
+        self.job_man = job_man
 
     def run(self) -> str:
         """
@@ -31,7 +33,16 @@ class LineEditor:
         Returns the finished line once the user presses enter.
         """
         while True:
-            key = sys.stdin.read(1) # read one char at a time
+
+            #wait for input in stdin or read_fd
+            ready, _, _ = select.select([sys.stdin, self.read_fd], [], [])
+
+            if self.read_fd in ready:
+                #TODO: implement job removal
+                ...
+                
+            if sys.stdin in ready:
+                key = sys.stdin.read(1) # read one char at a time
 
             if key == '\n':
                 self.clear_candidates()

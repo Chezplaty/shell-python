@@ -46,11 +46,13 @@ def main():
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()
 
-    read_fd, write_fd = os.pipe() # create pipe to wake up line editor for signals
-    signal.set_wakeup_fd(write_fd) # if SIGCHLD comes, write byte into this fd
-    
+
     handler = make_sigchld_handler(jobs_manager)
     signal.signal(signal.SIGCHLD, handler)
+
+    read_fd, write_fd = os.pipe() # create pipe to wake up line editor for signals
+    os.set_blocking(write_fd, False) #make fd nonblocking
+    signal.set_wakeup_fd(write_fd) # if SIGCHLD comes, write byte into this fd
 
     builtins = {"exit": None,
                 "echo": handle_echo,
@@ -66,7 +68,7 @@ def main():
             sys.stdout.write("$ ")
             sys.stdout.flush()
 
-            line = LineEditor(choices, complete_manager.get_paths()).run()
+            line = LineEditor(choices, complete_manager.get_paths(), read_fd, jobs_manager).run()
         #restore on exit
 
         if not line.strip(): 

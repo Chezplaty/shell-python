@@ -6,6 +6,8 @@ from app.parser import Instruction
 
 Job = namedtuple("Job", ["job_num", "instruction", "background", "status"])
 
+#TODO: make sure the job marker changes work and make it more robust
+
 class JobsManager:
 
     def __init__(self):
@@ -13,6 +15,9 @@ class JobsManager:
         self.job_num = 1
         self.used_job_nums = set()
         self.completed_background_jobs = set()
+        self.job_order = [] # stack
+        self.current_job = None
+        self.previous_job = None
 
     def handle_jobs(self, instruction: Instruction) -> None:
         """
@@ -21,22 +26,32 @@ class JobsManager:
         """
 
         jobs = sorted(
-            (job for job in self.jobs.values() if job.job_num is not None),
-            key=lambda job: job.job_num
+            ((pid, job) for pid, job in self.jobs.items() if job.job_num is not None),
+            key=lambda pair: pair[1].job_num
         )
 
         #TODO: replace '+' with appropiate marker when implemented
-        for job in jobs:
-            print(self.format_print_text(job))
+        for pid, job in jobs:
+            print(self.format_print_text(pid))
 
-    def format_print_text(self, job) -> str:
+    def format_print_text(self, pid: int) -> str:
         """
         Formats a job's number, status, and command into a display string.
         Returns the formatted text for printing to the terminal.
         """
+        job = self.get_job(pid)
+        marker = self.choose_marker(pid)
         line = job.instruction.cmd + ' ' + " ".join(job.instruction.args)
-        text = f"[{job.job_num}] + {job.status:<10}{line}"
+        text = f"[{job.job_num}] {marker} {job.status:<10}{line}"
         return text
+
+    def choose_marker(self, pid: int) -> str:
+        marker = ' '
+        if self.current_job == pid:
+            marker = '+'
+        elif self.previous_job == pid:
+            marker = '-'
+        return marker
 
     def get_job(self, pid: int) -> Job:
         return self.jobs[pid]
@@ -50,6 +65,10 @@ class JobsManager:
             self.job_num += 1
         return self.job_num
 
+    def set_job_markers(self, pid: int):
+        self.previous_job = self.current_job
+        self.current_job = pid
+
     def add_job(self, pid: int, instruction: Instruction, background: bool) -> None:
         """
         Register a process as a managed job with its instruction and state.
@@ -59,6 +78,7 @@ class JobsManager:
         if background:
             job_num = self.get_next_job_num()
             self.used_job_nums.add(job_num)
+            self.set_job_markers(pid)
         self.jobs[pid] = Job(job_num, instruction, background, status='running')
 
     def mark_exited(self, pid: int) -> None:
@@ -89,6 +109,17 @@ class JobsManager:
             self.used_job_nums.discard(job.job_num)
             self.job_num = min(self.job_num, job.job_num)
             self.completed_background_jobs.remove(pid)
+
+            # set the next priority jobs
+            self.remove_markers(pid)
+
+    def remove_markers(self, pid: int) -> None:
+
+        if self.current_job == pid:
+            self.current_job = self.previous_job
+            self.previous_job = next(reversed(self.jobs))
+        elif self.previous_job == pid:
+            self.previous_job = next(reversed(self.jobs))
 
     def print_job(self, pid: int):
         """

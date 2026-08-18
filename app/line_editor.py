@@ -72,15 +72,14 @@ class LineEditor:
         Removes each completed job after redisplaying the current input line.
         """
         for pid in self.job_man.get_completed_jobs():
-            job = self.job_man.get_job(pid)
+            self.print_job_and_redisplay(pid)
             self.job_man.remove_job(pid)
-            self.print_job_and_redisplay(job)
 
-    def print_job_and_redisplay(self, job: Job) -> None:
+    def print_job_and_redisplay(self, pid: int) -> None:
         """
         Prints a completed job notification and redraws the current command line.
         """
-        text = self.job_man.format_print_text(job)
+        text = self.job_man.format_print_text(pid)
         self.display.show_job_notice(text, self.edit_buffer.text(), self.edit_buffer.cursor_pos)
 
     # -------------------------------------------------------------------------

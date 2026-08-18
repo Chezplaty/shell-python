@@ -58,7 +58,7 @@ def main():
                 "pwd": handle_pwd,
                 "cd": handle_cd,
                 "complete": complete_manager.handle_complete,
-                "jobs": None}
+                "jobs": jobs_manager.handle_jobs}
 
     while True:
         with set_cbreak_mode():

@@ -14,14 +14,14 @@ class JobsManager:
         self.used_job_nums = set()
         self.completed_background_jobs = set()
 
-    def handle_jobs(self) -> None:
+    def handle_jobs(self, instruction: Instruction) -> None:
         """
         Sorts all background jobs by their job number and prints each job.
         Uses the formatted job text for consistent job status display.
         """
 
         jobs = sorted(
-            (job for job in self.job.values() if job.job_num is not None),
+            (job for job in self.jobs.values() if job.job_num is not None),
             key=lambda job: job.job_num
         )
 

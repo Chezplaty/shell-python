@@ -88,6 +88,6 @@ class Display:
         sys.stdout.write(text)
 
         sys.stdout.write("$ ")
-        sys.stdout.write(buffer_text)
+        sys.stdout.write(f"{buffer_text}\n")
         sys.stdout.write(f"\033[{cursor_pos + 3}G")
         sys.stdout.flush()

@@ -14,6 +14,30 @@ class JobsManager:
         self.used_job_nums = set()
         self.completed_background_jobs = set()
 
+    def handle_jobs(self) -> None:
+        """
+        Sorts all background jobs by their job number and prints each job.
+        Uses the formatted job text for consistent job status display.
+        """
+
+        jobs = sorted(
+            (job for job in self.job.values() if job.job_num is not None),
+            key=lambda job: job.job_num
+        )
+
+        #TODO: replace '+' with appropiate marker when implemented
+        for job in jobs:
+            print(self.format_print_text(job))
+
+    def format_print_text(self, job) -> str:
+        """
+        Formats a job's number, status, and command into a display string.
+        Returns the formatted text for printing to the terminal.
+        """
+        line = job.instruction.cmd + ' ' + " ".join(job.instruction.args)
+        text = f"[{job.job_num}] + {job.status:<10}{line}"
+        return text
+
     def get_job(self, pid: int) -> Job:
         return self.jobs[pid]
 
@@ -35,16 +59,16 @@ class JobsManager:
         if background:
             job_num = self.get_next_job_num()
             self.used_job_nums.add(job_num)
-        self.jobs[pid] = Job(job_num, instruction, background, status=None)
+        self.jobs[pid] = Job(job_num, instruction, background, status='running')
 
-    def mark_exited(self, pid: int, status: int) -> None:
+    def mark_exited(self, pid: int) -> None:
         """
         Record the exit status for a tracked process.
         Leave the job unchanged when the process is not currently tracked.
         """
         job = self.jobs.get(pid)
         if job is not None:
-            self.jobs[pid] = job._replace(status=status)
+            self.jobs[pid] = job._replace(status='done')
             if job.job_num is not None: # if it is a background job, mark it as completed
                 self.completed_background_jobs.add(pid)
 
@@ -53,7 +77,7 @@ class JobsManager:
         Return whether the specified job has finished execution.
         A job is finished when its recorded status is no longer None.
         """
-        return self.jobs[pid].status is not None
+        return self.jobs[pid].status == 'done'
 
     def remove_job(self, pid: int) -> None:
         """
@@ -98,7 +122,7 @@ def make_sigchld_handler(jobs_manager: JobsManager) -> function:
             if pid == 0:
                 return
             
-            jobs_manager.mark_exited(pid, 'done')
+            jobs_manager.mark_exited(pid)
 
     return handle_sigchld
 

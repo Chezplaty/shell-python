@@ -80,8 +80,7 @@ class LineEditor:
         """
         Prints a completed job notification and redraws the current command line.
         """
-        line = job.instruction.cmd + " ".join(job.instruction.args)
-        text = f"[{job.job_num}] + {job.status:<10}{line}\n"
+        text = self.job_man.format_print_text(job)
         self.display.show_job_notice(text, self.edit_buffer.text(), self.edit_buffer.cursor_pos)
 
     # -------------------------------------------------------------------------

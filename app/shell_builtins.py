@@ -82,9 +82,6 @@ class CompleteManager:
         except KeyError: #if key doesnt exist, dont raise error
             pass
 
-#TODO: create a handle_jobs function: collects all jobs that have a finished status
-#print them, and remove them from jobs dictionary
-
 def handle_cd(instruction: Instruction) -> None:
     """
     Checks if given directory exists.

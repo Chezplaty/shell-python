@@ -9,6 +9,10 @@ class Display:
         """
         self.candidate_lines = 0
 
+    def display_prompt(self) -> None:
+        sys.stdout.write("$ ")
+        sys.stdout.flush()
+
     def echo(self, key: str) -> None:
         """
         Writes a single typed character to the terminal.

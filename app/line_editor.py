@@ -25,6 +25,8 @@ class LineEditor:
         Reads keystrokes one at a time, handling editing and tab completion.
         Returns the finished line once the user presses enter.
         """
+        self.display.display_prompt()
+
         while True:
 
             #wait for input in stdin or read_fd

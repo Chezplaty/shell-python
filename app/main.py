@@ -63,9 +63,6 @@ def main():
     while True:
         with set_cbreak_mode():
 
-            sys.stdout.write("$ ")
-            sys.stdout.flush()
-
             line = LineEditor(choices, complete_manager.get_paths(), read_fd, jobs_manager).run()
         #restore on exit
 

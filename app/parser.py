@@ -29,6 +29,16 @@ def parse_overwrite(tokens: list[Token], i: int) -> tuple[Redirect, int]:
 
     return Redirect(tokens[i].type, target.value), i + 1
 
+def parse_pipe(tokens: list[Token], i: int) -> tuple[Redirect, int]:
+    if i <= 0 or i + 1 >= len(tokens): #pipe cant be the first or last
+        raise ParseError(f"parse error near '{tokens[i].value}'")
+
+    target = tokens[i + 1]
+    if target.type != TokenType.WORD:
+        raise ParseError(f"parse error near '{tokens[i].value}'")
+
+    return Redirect(tokens[i].type, target.value), i + 1
+    
 def parse(tokens: list[Token]) -> Instruction:
     if not tokens:
         return Instruction("", [], [], False)
@@ -36,18 +46,20 @@ def parse(tokens: list[Token]) -> Instruction:
     run_bg = tokens[-1].value == '&' #check if last token is &
     end = len(tokens) - 1 if run_bg else len(tokens)
 
-    cmd = tokens[0].value
+    cmd = ""
     args = []
     redirects = []
-    i = 1 
+    i = 0
 
     while i < end:
         token = tokens[i]
 
-        if token.type == TokenType.WORD:
-            args.append(token.value)
+        if token.type == TokenType.PIPE:
+            redirect, i = parse_pipe(tokens, i)
+            redirects.append(redirect)
+            continue
 
-        elif token.type in {
+        if token.type in {
             TokenType.REDIRECT_STDOUT,
             TokenType.REDIRECT_STDERR,
             TokenType.APPEND_STDOUT,
@@ -55,6 +67,14 @@ def parse(tokens: list[Token]) -> Instruction:
         }:
             redirect, i = parse_overwrite(tokens, i)
             redirects.append(redirect)
+            continue
+
+
+        if i == 0:
+            cmd = tokens[0].value
+
+        elif token.type == TokenType.WORD:
+            args.append(token.value)
 
         i += 1
 

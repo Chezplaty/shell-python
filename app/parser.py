@@ -30,6 +30,7 @@ def parse_overwrite(tokens: list[Token], i: int) -> tuple[Redirect, int]:
     return Redirect(tokens[i].type, target.value), i + 1
 
 def parse_pipe(tokens: list[Token], i: int) -> tuple[Redirect, int]:
+
     if i <= 0 or i + 1 >= len(tokens): #pipe cant be the first or last
         raise ParseError(f"parse error near '{tokens[i].value}'")
 
@@ -39,10 +40,11 @@ def parse_pipe(tokens: list[Token], i: int) -> tuple[Redirect, int]:
         raise ParseError(f"parse error near '{tokens[i].value}'")
 
     return Redirect(tokens[i].type, target.value), i + 1
-    
-def parse(tokens: list[Token]) -> Instruction:
+
+#TODO: implement returning more than one Instruction, especially for pipes and chaining    
+def parse(tokens: list[Token]) -> list[Instruction] | None:
     if not tokens:
-        return Instruction("", [], [], False)
+        return
 
     run_bg = tokens[-1].value == '&' #check if last token is &
     end = len(tokens) - 1 if run_bg else len(tokens)
@@ -50,6 +52,7 @@ def parse(tokens: list[Token]) -> Instruction:
     cmd = ""
     args = []
     redirects = []
+    instructions = []
     i = 0
 
     while i < end:
@@ -58,6 +61,7 @@ def parse(tokens: list[Token]) -> Instruction:
         if token.type == TokenType.PIPE:
             redirect, i = parse_pipe(tokens, i)
             redirects.append(redirect)
+            instructions.append(Instruction(cmd, args, redirects, run_bg))
             continue
 
         if token.type in {
@@ -79,6 +83,7 @@ def parse(tokens: list[Token]) -> Instruction:
 
         i += 1
 
-    return Instruction(cmd, args, redirects, run_bg)
+    instructions.append(Instruction(cmd, args, redirects, run_bg))
+    return instructions
             
 

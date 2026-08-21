@@ -24,6 +24,8 @@ def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, s
     targets = {}
 
     for redirect in instruction.redirects:
+        if redirect.type == TokenType.PIPE: #TODO: support pipe redirects
+            continue
         fd, mode = REDIRECT_FD_MODES[redirect.type]
         targets[fd] = (redirect.target, mode)
 

@@ -3,7 +3,7 @@ import os
 import signal
 
 from app.errors import BuiltinError, ParseError
-from app.executor import handle_command
+from app.executor import run_instructions
 from app.lexer import Lexer
 from app.line_editor import LineEditor
 from app.tab_completion import compile_choices
@@ -72,19 +72,19 @@ def main():
         tokens = Lexer().tokenize(line)
 
         try:
-            instruction = parse(tokens)
+            instructions = parse(tokens)
         except ParseError as e:
             print(f"shell: {e}")
             continue
 
-        if instruction.cmd == "exit":
+        if not instructions:
+            continue
+
+        if instructions[0].cmd == "exit":
             break
 
         try:
-            if instruction.run_bg:
-                fork_and_track(jobs_manager, instruction, True, lambda: handle_command(instruction, builtins, jobs_manager))
-            else:
-                handle_command(instruction, builtins, jobs_manager)
+            run_instructions(instructions, jobs_manager, builtins)
         except BuiltinError as e:
             print(e)
 

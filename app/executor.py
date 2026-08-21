@@ -6,6 +6,16 @@ from app.redirects import open_redirects, redirected_fds
 from app.parser import Instruction
 from app.jobs import JobsManager, fork_and_track
 
+def run_instructions(instructions: list[Instruction], jobs_manager: JobsManager, builtins: dict[str : function]) -> None:
+    """
+    Runs each parsed instruction in order.
+    """
+    for instruction in instructions:
+        if instruction.run_bg:
+            fork_and_track(jobs_manager, instruction, True, lambda: handle_command(instruction, builtins, jobs_manager))
+        else:
+            handle_command(instruction, builtins, jobs_manager)
+
 def handle_external_programs(instruction: Instruction, files: dict[int, IO], jobs_manager: JobsManager):
     """
     Run an external program with the provided file descriptors.

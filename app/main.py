@@ -15,7 +15,7 @@ from app.shell_builtins import (
     handle_pwd,
     handle_type
 )
-from app.jobs import JobsManager, make_sigchld_handler, fork_and_track
+from app.jobs import JobsManager, make_sigchld_handler
 
 from contextlib import contextmanager
 import tty

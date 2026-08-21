@@ -33,8 +33,9 @@ def parse_pipe(tokens: list[Token], i: int) -> tuple[Redirect, int]:
     if i <= 0 or i + 1 >= len(tokens): #pipe cant be the first or last
         raise ParseError(f"parse error near '{tokens[i].value}'")
 
+    source = tokens[i - 1]
     target = tokens[i + 1]
-    if target.type != TokenType.WORD:
+    if source.type != TokenType.WORD or target.type != TokenType.WORD:
         raise ParseError(f"parse error near '{tokens[i].value}'")
 
     return Redirect(tokens[i].type, target.value), i + 1

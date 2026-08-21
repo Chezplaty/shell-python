@@ -12,7 +12,7 @@ REDIRECT_FD_MODES = {
     TokenType.REDIRECT_STDOUT: (1, "w"),
     TokenType.REDIRECT_STDERR: (2, "w"),
     TokenType.APPEND_STDOUT: (1, "a"),
-    TokenType.APPEND_STDERR: (2, "a")
+    TokenType.APPEND_STDERR: (2, "a"),
 }
 
 def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, str]]:
@@ -43,25 +43,25 @@ def open_redirects(instruction: Instruction) -> Generator[dict[int, IO]]:
         # open all the files and yield them
         for fd, (path, mode) in targets.items():
             try:
-                #fd points wherever file object's fd points
                 files[fd] = open(path, mode)
             except OSError as e:
                 raise BuiltinError(instruction.cmd, f"{path}: {e.strerror}") from e
-            
-        yield files
+
+        #yield files  
+        yield {fd: file.fileno() for fd, file in files.items()} #just yield the numbers instead of objects
 
     finally:
         for file in files.values():
             file.close()
 
 @contextmanager
-def redirected_fds(files: dict[int, IO]) -> Generator[None]:
+def redirected_fds(target_fds: dict[int, IO]) -> Generator[None]:
     """
     Makes a builtin command's printed output actually land in its redirected file, not the screen.
     Only lasts for the duration of the command; everything goes back to normal right after.
     """
 
-    if not files:
+    if not target_fds:
         yield
         return
 
@@ -70,12 +70,12 @@ def redirected_fds(files: dict[int, IO]) -> Generator[None]:
     sys.stderr.flush()
 
     #get new un-used fd number that points to same place original fd does
-    saved = {fd: os.dup(fd) for fd in files}
+    saved = {fd: os.dup(fd) for fd in target_fds}
 
     try:
-        for fd, file in files.items():
-            #make fd for stdout or stderr point to same place file's fd points to
-            os.dup2(file.fileno(), fd)
+        for fd, target in target_fds.items():
+            #make fd for stdout or stderr point to same place target's fd points to
+            os.dup2(target.fileno(), fd)
         yield
     finally:
         sys.stdout.flush()

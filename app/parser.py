@@ -4,11 +4,12 @@ from app.errors import ParseError
 
 class Instruction:
 
-    def __init__(self, cmd: str, args: list[str], redirects: list[(Redirect)], run_bg: bool):
+    def __init__(self, cmd: str, args: list[str], redirects: list[(Redirect)], run_bg: bool, pipe=False):
         self.cmd = cmd
         self.args = args
         self.redirects = redirects
         self.run_bg = run_bg
+        self.has_pipe = pipe
 
 Redirect = namedtuple('Redirect', ['type', 'target'])
 
@@ -29,7 +30,7 @@ def parse_overwrite(tokens: list[Token], i: int) -> tuple[Redirect, int]:
 
     return Redirect(tokens[i].type, target.value), i + 1
 
-def parse_pipe(tokens: list[Token], i: int) -> Redirect:
+def parse_pipe(tokens: list[Token], i: int) -> tuple[Redirect, int]:
 
     if i <= 0 or i + 1 >= len(tokens): #pipe cant be the first or last
         raise ParseError(f"parse error near '{tokens[i].value}'")
@@ -39,7 +40,7 @@ def parse_pipe(tokens: list[Token], i: int) -> Redirect:
     if source.type != TokenType.WORD or target.type != TokenType.WORD:
         raise ParseError(f"parse error near '{tokens[i].value}'")
 
-    return Redirect(tokens[i].type, target.value)
+    return i + 1
 
 #TODO: implement returning more than one Instruction, especially for pipes and chaining    
 def parse(tokens: list[Token]) -> list[Instruction] | None:
@@ -59,9 +60,8 @@ def parse(tokens: list[Token]) -> list[Instruction] | None:
         token = tokens[i]
 
         if token.type == TokenType.PIPE:
-            redirect = parse_pipe(tokens, i)
-            redirects.append(redirect)
-            instructions.append(Instruction(cmd, args, redirects, run_bg))
+            i = parse_pipe(tokens, i)
+            instructions.append(Instruction(cmd, args, redirects, run_bg, pipe=True))
 
             #reset for next instruction
             cmd = None
@@ -69,7 +69,15 @@ def parse(tokens: list[Token]) -> list[Instruction] | None:
             redirects = []
             continue
 
-        if token.type in {
+        if cmd is None:
+            cmd = token.value
+            i += 1
+            continue
+
+        if token.type == TokenType.WORD:
+            args.append(token.value)
+
+        elif token.type in {
             TokenType.REDIRECT_STDOUT,
             TokenType.REDIRECT_STDERR,
             TokenType.APPEND_STDOUT,
@@ -77,14 +85,6 @@ def parse(tokens: list[Token]) -> list[Instruction] | None:
         }:
             redirect, i = parse_overwrite(tokens, i)
             redirects.append(redirect)
-            continue
-
-
-        if cmd is None:
-            cmd = token.value
-
-        elif token.type == TokenType.WORD:
-            args.append(token.value)
 
         i += 1
 

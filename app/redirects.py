@@ -24,8 +24,6 @@ def resolve_redirect_targets(instruction: Instruction) -> dict[int, tuple[str, s
     targets = {}
 
     for redirect in instruction.redirects:
-        if redirect.type == TokenType.PIPE: #TODO: support pipe redirects
-            continue
         fd, mode = REDIRECT_FD_MODES[redirect.type]
         targets[fd] = (redirect.target, mode)
 
@@ -49,8 +47,7 @@ def open_redirects(instruction: Instruction) -> Generator[dict[int, IO]]:
             except OSError as e:
                 raise BuiltinError(instruction.cmd, f"{path}: {e.strerror}") from e
 
-        #yield files  
-        yield {fd: file.fileno() for fd, file in files.items()} #just yield the numbers instead of objects
+        yield files  
 
     finally:
         for file in files.values():

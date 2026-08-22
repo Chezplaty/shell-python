@@ -147,6 +147,9 @@ def make_sigchld_handler(jobs_manager: JobsManager) -> function:
     return handle_sigchld
 
 def fork_stage(jobs_manager: JobsManager, instruction: Instruction, background: bool, run_in_child) -> int | None:
+    """
+    Returns pid of child process that ran.
+    """
     signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGCHLD})
     try:
         pid = os.fork()

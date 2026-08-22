@@ -87,6 +87,7 @@ def main():
             run_instructions(instructions, jobs_manager, builtins)
         except BuiltinError as e:
             print(e)
+            
 
 if __name__ == "__main__":
     main()

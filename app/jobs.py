@@ -146,11 +146,7 @@ def make_sigchld_handler(jobs_manager: JobsManager) -> function:
 
     return handle_sigchld
 
-def fork_and_track(jobs_manager: JobsManager, instruction: Instruction, background: bool, run_in_child) -> None:
-    """
-    Fork a child process, register it, and optionally wait for completion.
-    Block SIGCHLD during setup to prevent races while registering the child.
-    """
+def fork_stage(jobs_manager: JobsManager, instruction: Instruction, background: bool, run_in_child) -> int | None:
     signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGCHLD})
     try:
         pid = os.fork()
@@ -160,15 +156,23 @@ def fork_and_track(jobs_manager: JobsManager, instruction: Instruction, backgrou
             run_in_child()
             os._exit(0)
 
-        # parent
+        #parent
         jobs_manager.add_job(pid, instruction, background)
 
         if background:
             jobs_manager.print_job(pid)
+
+        return pid
+    
     finally:
         signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGCHLD})
 
-    if not background:
-        while not jobs_manager.is_finished(pid): #parent process waits for child to finish
-            signal.pause()
-        jobs_manager.remove_job(pid)
+def wait_stage(jobs_manager: JobsManager, pid: int):
+    """
+    Blocks until the given pipeline stage's process has exited, then forgets it.
+    """
+
+    while not jobs_manager.is_finished(pid): #parent process waits for child to finish
+        signal.pause()
+    jobs_manager.remove_job(pid)
+

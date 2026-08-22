@@ -156,7 +156,11 @@ def fork_stage(jobs_manager: JobsManager, instruction: Instruction, background: 
 
         if pid == 0: #child process
             signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGCHLD})
-            run_in_child()
+            try:
+                run_in_child()
+            except Exception as e:
+                print(e)
+                os._exit(1) #make sure to close child if there are errors
             os._exit(0)
 
         #parent

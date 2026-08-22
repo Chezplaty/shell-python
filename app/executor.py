@@ -6,8 +6,6 @@ from app.parser import Instruction
 from app.jobs import JobsManager, fork_stage, wait_stage
 from app.errors import BuiltinError
 
-
-#TODO: split function into helper methods
 def run_instructions(instructions: list[Instruction], jobs_manager: JobsManager, builtins: dict[str, function]) -> None:
     """
     Runs a sequence of instructions, creating pipes and child processes as needed.

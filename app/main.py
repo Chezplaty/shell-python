@@ -58,7 +58,8 @@ def main():
                 "pwd": handle_pwd,
                 "cd": handle_cd,
                 "complete": complete_manager.handle_complete,
-                "jobs": jobs_manager.handle_jobs}
+                "jobs": jobs_manager.handle_jobs,
+                "history": None}
 
     while True:
         with set_cbreak_mode():
@@ -88,6 +89,5 @@ def main():
         except BuiltinError as e:
             print(e)
             
-
 if __name__ == "__main__":
     main()

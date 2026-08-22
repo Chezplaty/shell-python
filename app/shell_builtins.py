@@ -145,5 +145,6 @@ BUILTIN_NAMES = {
     "pwd",
     "cd",
     "complete",
-    "jobs"
+    "jobs",
+    "history"
 }

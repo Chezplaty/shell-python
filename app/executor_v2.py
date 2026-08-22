@@ -1,5 +1,4 @@
 import os
-from typing import IO
 
 from app.path_utils import get_executable
 from app.redirects import open_redirects, redirected_fds
@@ -19,7 +18,7 @@ def run_instructions(instructions: list[Instruction], jobs_manager: JobsManager,
         if instruction.has_pipe: #if there is a pipe
             read_fd, write_fd = os.pipe()
         else:
-            read_fd, write_fd = None
+            read_fd, write_fd = None, None
 
         handler = builtins.get(instruction.cmd, "")
         #forking occurs for external programs, background programs, and pipelines
@@ -27,7 +26,7 @@ def run_instructions(instructions: list[Instruction], jobs_manager: JobsManager,
 
         #if no forking, run the command regularly, continue
         if not needs_fork:
-            run_command()
+            run_command(instruction, builtins, jobs_manager)
             continue
 
         #the child only keeps open and redirects the fds that it will use, it closes the ones that it doesnt use

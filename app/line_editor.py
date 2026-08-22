@@ -41,7 +41,7 @@ class LineEditor:
             if sys.stdin in ready:
                 key = sys.stdin.read(1) # read one char at a time
 
-            if key == '\n':
+            if key == '\n': #enter key
                 self.display.clear_candidates()
                 sys.stdout.write(key)
                 sys.stdout.flush()

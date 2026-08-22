@@ -82,6 +82,26 @@ class CompleteManager:
         except KeyError: #if key doesnt exist, dont raise error
             pass
 
+class HistoryManager:
+
+    def __init__(self):
+        self.history = {}
+        self.num = 1
+
+    def add_line(self, line: str):
+        self.history[self.num] = line
+        self.num += 1
+
+    def handle_history(self, instruction: Instruction) -> None:
+        #TODO: error handling if the argument is not an integer
+        start = int(instruction.args[0]) if instruction.args else 1
+
+        if start < 0:
+            start = len(self.history) + start
+
+        for i in range(start, len(self.history)):
+            print(f"{i} {self.history[i]}")
+
 def handle_cd(instruction: Instruction) -> None:
     """
     Checks if given directory exists.

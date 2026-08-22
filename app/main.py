@@ -10,6 +10,7 @@ from app.tab_completion import compile_choices
 from app.parser import parse
 from app.shell_builtins import (
     CompleteManager,
+    HistoryManager,
     handle_cd,
     handle_echo,
     handle_pwd,
@@ -43,6 +44,7 @@ def main():
     choices = compile_choices()
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()
+    history_manager = HistoryManager()
 
 
     handler = make_sigchld_handler(jobs_manager)
@@ -59,7 +61,7 @@ def main():
                 "cd": handle_cd,
                 "complete": complete_manager.handle_complete,
                 "jobs": jobs_manager.handle_jobs,
-                "history": None}
+                "history": history_manager.handle_history}
 
     while True:
         with set_cbreak_mode():
@@ -70,6 +72,8 @@ def main():
         if not line.strip(): 
             continue
 
+        history_manager.add_line(line)
+        
         tokens = Lexer().tokenize(line)
 
         try:

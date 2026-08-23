@@ -113,6 +113,10 @@ class HistoryManager:
                 self.add_to_history(instruction)
                 return
 
+            elif flag == '-w':
+                self.write_to_file(instruction)
+                return
+
             elif flag.lstrip('-').isdigit():
                 start = int(flag)
         
@@ -129,6 +133,16 @@ class HistoryManager:
             with open(path, "r") as file:
                 for line in file:
                     self.add_line(line.rstrip('\r\n'))
+        except Exception as e:
+            raise BuiltinError(instruction.cmd, e)
+
+    def write_to_file(self, instruction: Instruction) -> None:
+
+        path = instruction.args[1]
+        try:
+            with open(path, "w") as file:
+                for line in self.history.values():
+                    file.write(f"{line}\n")
         except Exception as e:
             raise BuiltinError(instruction.cmd, e)
 

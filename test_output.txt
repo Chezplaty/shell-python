@@ -1,0 +1,30 @@
+history -r test_output.txt
+history -r test_history.txt
+ls -la
+cd /tmp
+echo "Hello world"
+pwd
+mkdir test-folder
+cd test-folder
+touch example.txt
+cat example.txt
+git status
+exit
+history
+echo cheese
+history -w test_output.txt
+history -r test_history.txt
+ls -la
+cd /tmp
+echo "Hello world"
+pwd
+mkdir test-folder
+cd test-folder
+touch example.txt
+cat example.txt
+git status
+exit
+history
+history -a test_output.txt
+cat test_output.txt
+history -a test_output.txt

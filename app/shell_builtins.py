@@ -88,6 +88,7 @@ class HistoryManager:
         self.history = {}
         self.num = 1
         self.pos = 1
+        self.written = 1
 
     def add_line(self, line: str) -> None:
         """
@@ -117,8 +118,15 @@ class HistoryManager:
                 self.write_to_file(instruction)
                 return
 
+            elif flag == '-a':
+                self.append_to_file(instruction)
+                return
+
             elif flag.lstrip('-').isdigit():
                 start = int(flag)
+
+            else:
+                raise BuiltinError(instruction.cmd, "flag unknown")
         
         self.list_history(start)
 
@@ -137,12 +145,30 @@ class HistoryManager:
             raise BuiltinError(instruction.cmd, e)
 
     def write_to_file(self, instruction: Instruction) -> None:
+        """
+        Write command history to the specified file.
+        Overwrites the file if it already exists.
+        """
 
         path = instruction.args[1]
         try:
             with open(path, "w") as file:
                 for line in self.history.values():
                     file.write(f"{line}\n")
+        except Exception as e:
+            raise BuiltinError(instruction.cmd, e)
+
+    def append_to_file(self, instruction: Instruction) -> None:
+        """
+        Append unwritten command history to the specified file.
+        Writes only entries not previously appended.
+        """
+        path = instruction.args[1]
+        try:
+            with open(path, "a") as file:
+                while self.written <= len(self.history):
+                    file.write(f"{self.history[self.written]}\n")
+                    self.written += 1
         except Exception as e:
             raise BuiltinError(instruction.cmd, e)
 

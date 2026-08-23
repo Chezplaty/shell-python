@@ -87,10 +87,12 @@ class HistoryManager:
     def __init__(self):
         self.history = {}
         self.num = 1
+        self.pos = 1
 
     def add_line(self, line: str):
         self.history[self.num] = line
         self.num += 1
+        self.pos = len(self.history) + 1 #set to one after latest command
 
     def handle_history(self, instruction: Instruction) -> None:
         #TODO: error handling if the argument is not an integer
@@ -101,6 +103,14 @@ class HistoryManager:
 
         for i in range(start, len(self.history)):
             print(f"{i} {self.history[i]}")
+
+    def get_next_line(self, direction: int) -> str | None:
+        new_pos = self.pos + direction
+        if new_pos <= 0 or new_pos > len(self.history):
+            return
+
+        self.pos = new_pos
+        return self.history[self.pos]
 
 def handle_cd(instruction: Instruction) -> None:
     """

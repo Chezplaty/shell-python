@@ -66,14 +66,14 @@ def main():
     while True:
         with set_cbreak_mode():
 
-            line = LineEditor(choices, complete_manager.get_paths(), read_fd, jobs_manager).run()
+            line = LineEditor(choices, complete_manager.get_paths(), read_fd, jobs_manager, history_manager).run()
         #restore on exit
 
         if not line.strip(): 
             continue
 
         history_manager.add_line(line)
-        
+
         tokens = Lexer().tokenize(line)
 
         try:

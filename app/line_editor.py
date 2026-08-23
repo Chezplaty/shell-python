@@ -10,7 +10,7 @@ from app.tab_completer import TabCompleter
 #TODO: since cursor can move left and right, it can delete inside words, add support for that
 class LineEditor:
 
-    def __init__(self, choices: list[str], paths: MappingProxyType, read_fd: 'fd', job_man: JobsManager) -> None:
+    def __init__(self, choices: list[str], paths: MappingProxyType, read_fd: 'fd', job_man: JobsManager, hist_man: HistoryManager) -> None:
         """
         Sets up the buffer, terminal display, and tab completer, and stores the read fd and job manager.
         """
@@ -19,6 +19,7 @@ class LineEditor:
         self.tab_completer = TabCompleter(choices, paths, self.edit_buffer, self.display)
         self.read_fd = read_fd
         self.job_man = job_man
+        self.hist_man = hist_man
 
     def run(self) -> str:
         """
@@ -109,7 +110,7 @@ class LineEditor:
         """
         sequence = sys.stdin.read(2) #read in 2 bytes, arrow keys are 3 bytes including esc
 
-        if sequence in {'[D', '[C'}:
+        if sequence in {'[A', '[B', '[C', '[D'}:
             self.handle_arrow_keys(sequence)
 
     def handle_arrow_keys(self, sequence: str) -> None:
@@ -117,10 +118,30 @@ class LineEditor:
         Moves the cursor left or right based on the given arrow-key sequence.
         Ignores movement that would place the cursor outside the input buffer.
         """
-        if sequence == '[D': #left
-            moved = self.edit_buffer.move_left()
-        else: #right
-            moved = self.edit_buffer.move_right()
+        
+        if sequence in {'[A', '[B'}:
+            self.handle_up_down(sequence)
+        else:
+            self.handle_left_right(sequence)
 
+    def handle_left_right(self, sequence: str) -> None:
+
+        if sequence == '[C': # right
+            moved = self.edit_buffer.move_right()
+        else: # left
+            moved = self.edit_buffer.move_left()
+        
         if moved:
             self.display.move_cursor(sequence)
+
+    def handle_up_down(self, sequence: str) -> None:
+
+        if sequence == '[A': #up
+            direction = -1
+        else: # down
+            direction = 1
+
+        old_text, replaced = self.edit_buffer.up_down_arrow(self.hist_man, direction)
+
+        if replaced:
+            self.display.redraw(replaced, old_text)

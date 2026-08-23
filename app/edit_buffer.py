@@ -57,7 +57,22 @@ class EditBuffer:
         self.cursor_pos += 1
         return True
 
-    def replace_suffix(self, old_len: int, new_text: str) -> None:
+    def up_down_arrow(self, hist_man: HistoryManager, direction: int) -> tuple[str | str] | tuple[None | None]:
+        """
+        Replace the current buffer with a previous or next history entry.
+        If there is no previous or next entry, return None.
+        """
+
+        line = hist_man.get_next_line(direction)
+        if line is None:
+            return (None, None)
+
+        old_text = self.text()
+        self.replace_buffer(len(old_text), line)
+
+        return old_text, line
+    
+    def replace_buffer(self, old_len: int, new_text: str) -> None:
         """
         Removes the last old_len characters from the buffer and appends new_text in their place.
         """
@@ -66,3 +81,4 @@ class EditBuffer:
 
         self.buffer.extend(new_text)
         self.cursor_pos += len(new_text) - old_len
+

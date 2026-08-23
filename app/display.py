@@ -37,16 +37,16 @@ class Display:
             sys.stdout.write("\033[C")
         sys.stdout.flush()
 
-    def redraw(self, output: str, prefix: str) -> None:
+    def redraw(self, new_word: str, old_word: str) -> None:
         """
-        Erases the last len(prefix) characters before the cursor and writes output in their place.
+        Erases the given characters before the cursor and writes output in their place.
         """
 
-        if prefix: # a 0-length move is still interpreted as 1 by terminals, so skip it
-            sys.stdout.write(f"\033[{len(prefix)}D") # move cursor to before prefix
+        if old_word: # a 0-length move is still interpreted as 1 by terminals, so skip it
+            sys.stdout.write(f"\033[{len(old_word)}D") # move cursor to before prev word
 
         sys.stdout.write("\033[0K") # erase from cursor to end of line
-        sys.stdout.write(f"{output}")
+        sys.stdout.write(f"{new_word}")
         sys.stdout.flush()
 
     def display_candidates(self, lines: list[str], buffer_len: int) -> None:

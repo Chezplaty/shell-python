@@ -117,5 +117,5 @@ class TabCompleter:
         Updates both the terminal display and the input buffer accordingly.
         """
         self.display.redraw(candidate, cursor.prefix)
-        self.edit_buffer.replace_suffix(len(cursor.prefix), candidate)
+        self.edit_buffer.replace_buffer(len(cursor.prefix), candidate)
         cursor.prefix = candidate

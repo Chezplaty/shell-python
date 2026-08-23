@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from app.path_utils import get_executable
+from app.path_utils import get_executable, open_file
 from app.errors import BuiltinError
 from app.parser import Instruction
 

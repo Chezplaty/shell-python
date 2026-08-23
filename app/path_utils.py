@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from app.errors import BuiltinError
 
 def get_executable(cmd: str) -> Path | None:
     """

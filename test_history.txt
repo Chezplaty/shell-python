@@ -1,0 +1,10 @@
+ls -la
+cd /tmp
+echo "Hello world"
+pwd
+mkdir test-folder
+cd test-folder
+touch example.txt
+cat example.txt
+git status
+exit

@@ -89,17 +89,57 @@ class HistoryManager:
         self.num = 1
         self.pos = 1
 
-    def add_line(self, line: str):
+    def add_line(self, line: str) -> None:
+        """
+        Add a line to the command history.
+        Update the history position to after the latest command.
+        """
+
         self.history[self.num] = line
         self.num += 1
         self.pos = len(self.history) + 1 #set to one after latest command
 
     def handle_history(self, instruction: Instruction) -> None:
-        #TODO: error handling if the argument is not an integer
-        start = int(instruction.args[0]) if instruction.args else 1
+        """
+        Handle the history command and its optional arguments.
+        Supports reading history from a file and listing history entries.
+        """
+
+        start = 1
+        if instruction.args:
+            flag = instruction.args[0]
+
+            if flag == '-r':
+                self.add_to_history(instruction)
+                return
+
+            elif flag.lstrip('-').isdigit():
+                start = int(flag)
+        
+        self.list_history(start)
+
+    def add_to_history(self, instruction: Instruction) -> None:
+        """
+        Read history entries from the specified file.
+        Add each line from the file to the command history.
+        """
+
+        path = instruction.args[1]
+        try:
+            with open(path, "r") as file:
+                for line in file:
+                    self.add_line(line.rstrip('\r\n'))
+        except Exception as e:
+            raise BuiltinError(instruction.cmd, e)
+
+    def list_history(self, start) -> None:
+        """
+        Print history entries starting from the specified index.
+        Supports negative indices relative to the end of history.
+        """
 
         if start < 0:
-            start = len(self.history) + start
+            start = max(1, len(self.history) + start) #start cant go below 1
 
         for i in range(start, len(self.history)):
             print(f"{i} {self.history[i]}")

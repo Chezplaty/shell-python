@@ -42,7 +42,7 @@ def main():
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
-    get_histfile()
+    
     choices = compile_choices()
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()

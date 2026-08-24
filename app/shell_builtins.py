@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from app.path_utils import get_executable
+from app.path_utils import get_executable, get_histfile
 from app.errors import BuiltinError
 from app.parser import Instruction
 
@@ -90,6 +90,16 @@ class HistoryManager:
         self.pos = 1
         self.written = 1
 
+        self.load_hist_file()
+
+    def load_hist_file(self) -> None:
+        hist_path = get_histfile()
+
+        if hist_path is None:
+            return
+
+        self.add_to_history(hist_path)
+
     def add_line(self, line: str) -> None:
         """
         Add a line to the command history.
@@ -111,7 +121,7 @@ class HistoryManager:
             flag = instruction.args[0]
 
             if flag == '-r':
-                self.add_to_history(instruction)
+                self.add_to_history(instruction.args[1])
                 return
 
             elif flag == '-w':
@@ -130,19 +140,18 @@ class HistoryManager:
         
         self.list_history(start)
 
-    def add_to_history(self, instruction: Instruction) -> None:
+    def add_to_history(self, path: str) -> None:
         """
         Read history entries from the specified file.
         Add each line from the file to the command history.
         """
 
-        path = instruction.args[1]
         try:
             with open(path, "r") as file:
                 for line in file:
                     self.add_line(line.rstrip('\r\n'))
         except Exception as e:
-            raise BuiltinError(instruction.cmd, e)
+            raise BuiltinError("history", e)
 
     def write_to_file(self, instruction: Instruction) -> None:
         """

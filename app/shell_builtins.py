@@ -246,15 +246,47 @@ class HistoryManager:
         self.pos = new_pos
         return self.history[self.pos]
 
-def handle_declare(instruction: Instruction) -> None:
+class VarManager:
 
-    if not instruction.args: # no arguments
-        return
+    def __init__(self):
+        self.vars = {}
 
-    flag = instruction.args[0]
-    if flag == '-p':
+    def handle_declare(self, instruction: Instruction) -> None:
+
+        if not instruction.args: # no arguments
+            return
+
+        flag = instruction.args[0]
+        if flag == '-p':
+            self.print_var(instruction)
+            return
+
+        # no flag, declare a variable
+        self.add_var(flag)
+
+    def print_var(self, instruction) -> None:
+        """
+        Print the value of the specified variable.
+        Raises an error if the variable is not defined.
+        """
+
         var = instruction.args[1]
-        raise BuiltinError(instruction.cmd, f"{var}: not found")
+        if var in self.vars:
+            print(f"{instruction.cmd} -- {var}=\"{self.vars[var]}\"")
+        else:
+            raise BuiltinError(instruction.cmd, f"{var}: not found")
+
+    def add_var(self, args: str) -> None:
+        """
+        Add or update a variable using a name=value assignment.
+        Stores None as the value when no assignment value is provided.
+        """
+        
+        parts = args.split('=')
+        var = parts[0]
+        val = parts[1] if len(parts) > 1 else None
+        self.vars[var] = val
+
     
 def handle_cd(instruction: Instruction) -> None:
     """

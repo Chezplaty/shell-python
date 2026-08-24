@@ -11,11 +11,11 @@ from app.parser import parse
 from app.shell_builtins import (
     CompleteManager,
     HistoryManager,
+    VarManager,
     handle_cd,
     handle_echo,
     handle_pwd,
     handle_type,
-    handle_declare
 )
 from app.jobs import JobsManager, make_sigchld_handler
 
@@ -46,6 +46,7 @@ def run_shell(history_manager: HistoryManager):
     choices = compile_choices()
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()
+    var_manager = VarManager()
 
     handler = make_sigchld_handler(jobs_manager)
     signal.signal(signal.SIGCHLD, handler)
@@ -62,7 +63,7 @@ def run_shell(history_manager: HistoryManager):
                 "complete": complete_manager.handle_complete,
                 "jobs": jobs_manager.handle_jobs,
                 "history": history_manager.handle_history,
-                "declare": handle_declare}
+                "declare": var_manager.handle_declare}
 
     while True:
         with set_cbreak_mode():

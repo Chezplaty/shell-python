@@ -204,7 +204,7 @@ class HistoryManager:
         Append unwritten command history to the specified file.
         Updates the written position when appending during normal operation.
         """
-        
+
         start = self.hist_start if exit else self.written
         try:
             with open(path, "a") as file:
@@ -302,5 +302,6 @@ BUILTIN_NAMES = {
     "cd",
     "complete",
     "jobs",
-    "history"
+    "history",
+    "declare"
 }

@@ -8,7 +8,6 @@ from app.lexer import Lexer
 from app.line_editor import LineEditor
 from app.tab_completion import compile_choices
 from app.parser import parse
-from app.path_utils import get_histfile
 from app.shell_builtins import (
     CompleteManager,
     HistoryManager,
@@ -61,7 +60,8 @@ def run_shell(history_manager: HistoryManager):
                 "cd": handle_cd,
                 "complete": complete_manager.handle_complete,
                 "jobs": jobs_manager.handle_jobs,
-                "history": history_manager.handle_history}
+                "history": history_manager.handle_history,
+                "declare": None}
 
     while True:
         with set_cbreak_mode():

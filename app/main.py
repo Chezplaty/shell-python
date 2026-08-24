@@ -37,17 +37,15 @@ def set_cbreak_mode():
     finally:
         termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
 
-def main():
+def run_shell(history_manager: HistoryManager):
     """
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
-    
+
     choices = compile_choices()
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()
-    history_manager = HistoryManager()
-
 
     handler = make_sigchld_handler(jobs_manager)
     signal.signal(signal.SIGCHLD, handler)
@@ -96,4 +94,5 @@ def main():
             print(e)
             
 if __name__ == "__main__":
-    main()
+    with HistoryManager() as hm:
+        run_shell(hm)

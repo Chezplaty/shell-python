@@ -84,21 +84,54 @@ class CompleteManager:
 
 class HistoryManager:
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """
+        Initialize the history manager and its tracking state.
+        Sets up history storage and command position counters.
+        """
+
         self.history = {}
         self.num = 1
         self.pos = 1
         self.written = 1
 
+        self.hist_start = 1
+
+    def __enter__(self) -> HistoryManager:
+        """
+        Load command history when entering the context manager.
+        Returns the initialized history manager instance.
+        """
+
         self.load_hist_file()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """
+        Append pending command history when leaving the context manager.
+        Returns False to allow any exception to propagate.
+        """
+
+        hist_path = get_histfile()
+
+        if hist_path is not None:
+            self.append_to_file(hist_path, exit=True)
+
+        return False #let exception propagate
 
     def load_hist_file(self) -> None:
+        """
+        Load existing command history from the configured history file.
+        Updates the starting position for newly added history entries.
+        """
+
         hist_path = get_histfile()
 
         if hist_path is None:
             return
 
         self.add_to_history(hist_path)
+        self.hist_start = len(self.history) + 1
 
     def add_line(self, line: str) -> None:
         """
@@ -125,11 +158,11 @@ class HistoryManager:
                 return
 
             elif flag == '-w':
-                self.write_to_file(instruction)
+                self.write_to_file(instruction.args[1])
                 return
 
             elif flag == '-a':
-                self.append_to_file(instruction)
+                self.append_to_file(instruction.args[1])
                 return
 
             elif flag.lstrip('-').isdigit():
@@ -153,33 +186,37 @@ class HistoryManager:
         except Exception as e:
             raise BuiltinError("history", e)
 
-    def write_to_file(self, instruction: Instruction) -> None:
+    def write_to_file(self, path: str) -> None:
         """
         Write command history to the specified file.
         Overwrites the file if it already exists.
         """
 
-        path = instruction.args[1]
         try:
             with open(path, "w") as file:
                 for line in self.history.values():
                     file.write(f"{line}\n")
         except Exception as e:
-            raise BuiltinError(instruction.cmd, e)
+            raise BuiltinError("history", e)
 
-    def append_to_file(self, instruction: Instruction) -> None:
+    def append_to_file(self, path: str, exit=False) -> None:
         """
         Append unwritten command history to the specified file.
-        Writes only entries not previously appended.
+        Updates the written position when appending during normal operation.
         """
-        path = instruction.args[1]
+        
+        start = self.hist_start if exit else self.written
         try:
             with open(path, "a") as file:
-                while self.written <= len(self.history):
-                    file.write(f"{self.history[self.written]}\n")
-                    self.written += 1
+                while start <= len(self.history):
+                    file.write(f"{self.history[start]}\n")
+                    start += 1
+
+            if not exit:
+                self.written = len(self.history) + 1
+
         except Exception as e:
-            raise BuiltinError(instruction.cmd, e)
+            raise BuiltinError("history", e)
 
     def list_history(self, start) -> None:
         """

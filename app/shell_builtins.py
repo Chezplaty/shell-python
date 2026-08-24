@@ -231,6 +231,11 @@ class HistoryManager:
             print(f"{i} {self.history[i]}")
 
     def get_next_line(self, direction: int) -> str | None:
+        """
+        Move through command history by the given direction and return the next line.
+        Returns None at the beginning of history or an empty string past its end.
+        """
+        
         new_pos = self.pos + direction
         if new_pos <= 0:
             return None

@@ -1,6 +1,10 @@
 import os
 from pathlib import Path
-from app.errors import BuiltinError
+
+SUPPORTED_SHELLS = {
+    "~/.zsh_history",
+    "~/.bash_history"
+}
 
 def get_executable(cmd: str) -> Path | None:
     """
@@ -15,3 +19,20 @@ def get_executable(cmd: str) -> Path | None:
             return full_path
 
     return None
+
+def get_histfile() -> str | None:
+    """
+    Return the shell history file path, if one can be found.
+    Check HISTFILE first, then fall back to supported shell paths.
+    """
+
+    hist_file = os.getenv("HISTFILE")
+
+    if hist_file is None: #histfile not exported, shell var only
+        for path in SUPPORTED_SHELLS:
+            hist_path = os.path.expanduser(path)
+            if os.path.exists(hist_path):
+                hist_file = hist_path
+                break
+
+    return hist_file

@@ -8,6 +8,7 @@ from app.lexer import Lexer
 from app.line_editor import LineEditor
 from app.tab_completion import compile_choices
 from app.parser import parse
+from app.path_utils import get_histfile
 from app.shell_builtins import (
     CompleteManager,
     HistoryManager,
@@ -41,6 +42,7 @@ def main():
     Runs the interactive shell loop that reads and processes user commands.
     Continuously prompts the user for input until the exit command is received.
     """
+    get_histfile()
     choices = compile_choices()
     complete_manager = CompleteManager()
     jobs_manager = JobsManager()

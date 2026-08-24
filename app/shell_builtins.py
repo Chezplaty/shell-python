@@ -281,11 +281,26 @@ class VarManager:
         Add or update a variable using a name=value assignment.
         Stores None as the value when no assignment value is provided.
         """
-        
+
         parts = args.split('=')
         var = parts[0]
+
+        if not self.is_valid_var_name(var):
+            raise BuiltinError("declare", f"\'{args}\': not a valid identifier")
+
         val = parts[1] if len(parts) > 1 else None
         self.vars[var] = val
+
+    def is_valid_var_name(self, var: str) -> bool:
+        """
+        Check whether a variable name starts with a letter or underscore.
+        Returns True for valid starting characters and False otherwise.
+        """
+        
+        if var[0].isalpha() or var[0] == '_':
+            return True
+
+        return False
 
     
 def handle_cd(instruction: Instruction) -> None:

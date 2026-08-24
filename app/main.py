@@ -14,7 +14,8 @@ from app.shell_builtins import (
     handle_cd,
     handle_echo,
     handle_pwd,
-    handle_type
+    handle_type,
+    handle_declare
 )
 from app.jobs import JobsManager, make_sigchld_handler
 
@@ -61,7 +62,7 @@ def run_shell(history_manager: HistoryManager):
                 "complete": complete_manager.handle_complete,
                 "jobs": jobs_manager.handle_jobs,
                 "history": history_manager.handle_history,
-                "declare": None}
+                "declare": handle_declare}
 
     while True:
         with set_cbreak_mode():

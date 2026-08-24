@@ -246,6 +246,16 @@ class HistoryManager:
         self.pos = new_pos
         return self.history[self.pos]
 
+def handle_declare(instruction: Instruction) -> None:
+
+    if not instruction.args: # no arguments
+        return
+
+    flag = instruction.args[0]
+    if flag == '-p':
+        var = instruction.args[1]
+        raise BuiltinError(instruction.cmd, f"{var}: not found")
+    
 def handle_cd(instruction: Instruction) -> None:
     """
     Checks if given directory exists.

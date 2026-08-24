@@ -232,8 +232,11 @@ class HistoryManager:
 
     def get_next_line(self, direction: int) -> str | None:
         new_pos = self.pos + direction
-        if new_pos <= 0 or new_pos > len(self.history):
-            return
+        if new_pos <= 0:
+            return None
+
+        if new_pos > len(self.history): # give empty line
+            return ''
 
         self.pos = new_pos
         return self.history[self.pos]

@@ -143,5 +143,5 @@ class LineEditor:
 
         old_text, replaced = self.edit_buffer.up_down_arrow(self.hist_man, direction)
 
-        if replaced:
+        if replaced is not None:
             self.display.redraw(replaced, old_text)

@@ -17,6 +17,7 @@ class TokenType(Enum):
     APPEND_STDOUT = auto()
     APPEND_STDERR = auto()
     PIPE = auto()
+    VARIABLE = auto()
 
 TOKEN_TYPES = {'>': TokenType.REDIRECT_STDOUT,
              '1>': TokenType.REDIRECT_STDOUT,
@@ -37,6 +38,9 @@ def finish_token(tokens: list[str], current: list[str]) -> None:
 
     word = "".join(current)
     token_type = TOKEN_TYPES.get(word, TokenType.WORD)
+    
+    if '$' in word:
+        token_type = TokenType.VARIABLE
 
     tokens.append(Token(token_type, word))
     current.clear()

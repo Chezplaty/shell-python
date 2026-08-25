@@ -302,11 +302,11 @@ class VarManager:
 
         return False
 
-    def get_var_val(self, var: str) -> str | None:
+    def get_var_val(self, var: str) -> str:
         if var in self.vars:
             return self.vars[var]
 
-        return None
+        return ''
 
     
 def handle_cd(instruction: Instruction) -> None:

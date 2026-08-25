@@ -74,11 +74,11 @@ def parse(tokens: list[Token], var_manager: VarManager) -> list[Instruction] | N
             i += 1
             continue
 
-        if token.type == TokenType.WORD: #check if there is a '$' in front
-            arg = token.value
-            if arg.startswith('$'):
-                arg = expand_var(arg, var_manager)
-            args.append(arg)
+        if token.type == TokenType.WORD: 
+            args.append(token.value)
+
+        elif token.type == TokenType.VARIABLE:
+            args.append(expand_var(token.value, var_manager))
 
         elif token.type in {
             TokenType.REDIRECT_STDOUT,
@@ -94,16 +94,35 @@ def parse(tokens: list[Token], var_manager: VarManager) -> list[Instruction] | N
     instructions.append(Instruction(cmd, args, redirects, run_bg))
     return instructions
             
-def expand_var(var: str, var_manager: VarManager) -> str:
+def expand_var(arg: str, var_manager: VarManager) -> str:
     """
     Expand a variable reference using the provided variable manager.
     Returns the variable's value if defined, otherwise returns the original string.
     """
-
-    if len(var) > 1:
-        val = var_manager.get_var_val(var[1:])
-
-    if val is not None:
-        return val
+    l, r = 0, 0
+    val = []
+    collect_var = False
     
-    return var
+    while r < len(arg):
+        char = arg[r]
+        if char == '$':
+            if collect_var:
+                val.extend(var_manager.get_var_val(arg[l+1:r]))
+            collect_var = True
+            l = r
+        elif char == '{' and collect_var: #${var}
+            collect_var = True
+            l = r
+        elif char == '}' and collect_var:
+            val.extend(var_manager.get_var_val(arg[l+1:r]))
+            collect_var = False
+
+        elif not collect_var:
+            val.append(char)
+
+        r += 1
+
+    if collect_var:
+        val.extend(var_manager.get_var_val(arg[l+1:r]))
+
+    return ''.join(val)

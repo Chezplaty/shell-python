@@ -96,13 +96,14 @@ def parse(tokens: list[Token], var_manager: VarManager) -> list[Instruction] | N
             
 def expand_var(arg: str, var_manager: VarManager) -> str:
     """
-    Expand a variable reference using the provided variable manager.
-    Returns the variable's value if defined, otherwise returns the original string.
+    Expand `$var` and `${var}` references using the provided variable manager.
+    Undefined variables are replaced with an empty string.
     """
+    
     l, r = 0, 0
     val = []
     collect_var = False
-    
+
     while r < len(arg):
         char = arg[r]
         if char == '$':

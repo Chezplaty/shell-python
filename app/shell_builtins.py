@@ -296,11 +296,17 @@ class VarManager:
         Check whether a variable name starts with a letter or underscore.
         Returns True for valid starting characters and False otherwise.
         """
-        
+
         if var[0].isalpha() or var[0] == '_':
             return True
 
         return False
+
+    def get_var_val(self, var: str) -> str | None:
+        if var in self.vars:
+            return self.vars[var]
+
+        return None
 
     
 def handle_cd(instruction: Instruction) -> None:

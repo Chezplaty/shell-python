@@ -79,7 +79,7 @@ def run_shell(history_manager: HistoryManager):
         tokens = Lexer().tokenize(line)
 
         try:
-            instructions = parse(tokens)
+            instructions = parse(tokens, var_manager)
         except ParseError as e:
             print(f"shell: {e}")
             continue

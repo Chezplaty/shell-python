@@ -43,7 +43,7 @@ def parse_pipe(tokens: list[Token], i: int) -> tuple[Redirect, int]:
     return i + 1
 
 #TODO: implement returning more than one Instruction, especially for pipes and chaining    
-def parse(tokens: list[Token]) -> list[Instruction] | None:
+def parse(tokens: list[Token], var_manager: VarManager) -> list[Instruction] | None:
     if not tokens:
         return
 
@@ -74,8 +74,11 @@ def parse(tokens: list[Token]) -> list[Instruction] | None:
             i += 1
             continue
 
-        if token.type == TokenType.WORD:
-            args.append(token.value)
+        if token.type == TokenType.WORD: #check if there is a '$' in front
+            arg = token.value
+            if arg.startswith('$'):
+                arg = expand_var(arg, var_manager)
+            args.append(arg)
 
         elif token.type in {
             TokenType.REDIRECT_STDOUT,
@@ -91,4 +94,16 @@ def parse(tokens: list[Token]) -> list[Instruction] | None:
     instructions.append(Instruction(cmd, args, redirects, run_bg))
     return instructions
             
+def expand_var(var: str, var_manager: VarManager) -> str:
+    """
+    Expand a variable reference using the provided variable manager.
+    Returns the variable's value if defined, otherwise returns the original string.
+    """
 
+    if len(var) > 1:
+        val = var_manager.get_var_val(var[1:])
+
+    if val is not None:
+        return val
+    
+    return var
